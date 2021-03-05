@@ -23,14 +23,15 @@ mutable struct Schedule
         end
         schedule = new(courses)
         schedule.names = () -> schedule.courses.keys
-        schedule.dates = () -> [collect(schedule.courses[i].date:(schedule.courses[i].date+schedule.courses[i].Ndays-1)) for i in findall(x -> !isnothing(x.date),schedule.courses)]
+        schedule.dates = () -> vcat([collect(schedule.courses[i].date:(schedule.courses[i].date+schedule.courses[i].Ndays-1)) for i in findall(x -> !isnothing(x.date),schedule.courses)]...)
         schedule
     end
 end
 
 
 function apply_prep!(s::Schedule)
-    dates = [0; s.dates()...]
+#     dates = [0; s.dates()...]
+    dates = s.dates()
     for (name,course) in s.courses
         if course.date === nothing
             for date in dates
@@ -76,6 +77,6 @@ function Base.show(io::IO,s::Schedule)
 #     RGBA(0/255,255/255,255/255),
 #     RGBA(255/255,255/255,255/255)])
     
-    display(heatmap(array,aspect_ratio=:equal,ylim=(1,6),yticks=(collect(1:i),names),
+    display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,6.5),yticks=(collect(1:i),names),
             clim=(0,2),color=cgrad([:red, :green, :yellow]),colorbar=:none,xticks = 1:max(dates...)  ))
 end;
