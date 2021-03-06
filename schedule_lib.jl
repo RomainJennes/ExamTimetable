@@ -78,5 +78,6 @@ function Base.show(io::IO,s::Schedule)
 #     RGBA(255/255,255/255,255/255)])
     
     display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,6.5),yticks=(collect(1:i),names),
-            clim=(0,2),color=cgrad([:red, :green, :yellow]),colorbar=:none,xticks = 1:max(dates...)  ))
+            clim=(0,2),color=cgrad([:red, :green, :yellow]),colorbar=:none,xticks = 1:max(dates...),
+            grid=:all, gridalpha=1, gridlinewidth=2))
 end;
