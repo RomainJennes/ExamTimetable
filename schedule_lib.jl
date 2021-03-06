@@ -78,6 +78,38 @@ function Base.show(io::IO,s::Schedule)
 #     RGBA(255/255,255/255,255/255)])
     
     display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,6.5),yticks=(collect(1:i),names),
+<<<<<<< HEAD
             clim=(0,2),color=cgrad([:red, :green, :yellow]),colorbar=:none,xticks = 1:max(dates...),
             grid=:all, gridalpha=1, gridlinewidth=2))
 end;
+=======
+            clim=(0,2),color=cgrad([:red, :green, :yellow]),colorbar=:none,xticks = 1:max(dates...)  ))
+end
+
+
+function n_available(c::Course)
+    return length(c.available)
+end
+
+function apply_arc_consistency!(s::Schedule)
+    for (name,course) in s.courses
+        
+        if course.date === nothing
+            removed = false
+            for (date_index,date) in enumerate(course.available)
+                
+                s_test=deepcopy(s)
+                s_test.courses[name].date=date
+                apply_prep!(s_test)
+                if any(n_available.(values(s_test.courses)).==0)
+                    deleteat!(s.courses[name].available,date_index)
+                    removed=true
+                end
+            end
+            if removed
+                apply_arc_consistency!(s) #because our constraints graph is fully connected 
+            end
+        end
+    end
+end
+>>>>>>> 2bd88a7d8db4f20c05a7c54741f42013237ede61
