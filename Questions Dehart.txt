@@ -1,0 +1,9 @@
+function MCV(courses)
+    available_days = Vector{}()
+    for i = 1:length(courses)
+        push!(available_days,length(courses[i].available))
+    end
+    available_days = sort!(available_days)
+    # trouver le cours qui correspond au 1e dans l'ordre
+    # appliquer la méthode LCV pour ce cours
+end
