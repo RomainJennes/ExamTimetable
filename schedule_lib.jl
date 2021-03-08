@@ -88,19 +88,15 @@ function Base.show(io::IO,s::Schedule)
         if course.date === nothing
             array[i,date2ind.(course.available)] .= 1
         else
-#             array[i,:] .= 1
-#             array[i,course.date-course.prep_days:course.date] .= 0
+            array[i,:] .= -1
             array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= 2
         end
     end
-#     mycmap = ColorGradient([RGBA(255/255,0/255,0/255),
-#     RGBA(0/255,255/255,255/255),
-#     RGBA(255/255,255/255,255/255)])
     
     i = length(s.courses)
     display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,6.5),yticks=(collect(1:i),s.names),
             xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
-            clim=(0,2),color=cgrad([:red, :green, :yellow]),colorbar=:none,
+            clim=(-1,2),color=cgrad([:lightgrey, :red, :green, :yellow]),colorbar=:none,
             grid=:all, gridalpha=1, gridlinewidth=2))
     
 end
