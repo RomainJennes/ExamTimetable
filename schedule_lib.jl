@@ -34,6 +34,7 @@ end
 
 function apply_prep!(s::Schedule)
     dates = s.dates()
+#     [course.available = s.period for course in s.courses]
     for course in s.courses
         if course.date === nothing
             for date in dates
