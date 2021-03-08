@@ -189,3 +189,13 @@ function import_excel(filename::String)
     end
     Schedule(courses,firstdate,lastdate)
 end;
+
+function MCV(s::Schedule)
+    courses = s.courses
+    available_days = Vector{}()
+    for i = 1:length(courses)
+        push!(available_days,length(courses[i].available))
+    end
+    (value, coord) = findmin(available_days)
+    return coord
+end;
