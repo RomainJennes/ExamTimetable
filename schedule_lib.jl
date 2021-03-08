@@ -34,7 +34,6 @@ end
 
 function apply_prep!(s::Schedule)
     dates = s.dates()
-#     [course.available = s.period for course in s.courses]
     for course in s.courses
         if course.date === nothing
             for date in dates
@@ -91,7 +90,7 @@ function Base.show(io::IO,s::Schedule)
         else
 #             array[i,:] .= 1
 #             array[i,course.date-course.prep_days:course.date] .= 0
-            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays)-1)] .= 2
+            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= 2
         end
     end
 #     mycmap = ColorGradient([RGBA(255/255,0/255,0/255),
@@ -228,4 +227,80 @@ function MCV(s::Schedule)
     end
     (value, coord) = findmin(available_days)
     return coord
-end;
+end
+
+function scheduleConstraints(s::Schedule)
+    for c1 in s.courses
+        if c1.date ≠ nothing
+            for c2 in s.courses
+                if c2.date ≠ nothing && c1 ≠ c2
+                    if c1.date ∈ c2.date:Day(1):(c2.date+c1.prep_days+c2.Ndays-Day(1))
+                        return false
+                    end
+                end
+            end
+        end
+        if c1.date ≠ nothing && (c1.date ∉ c1.available || c1.date+c1.Ndays -Day(1) ∉ c1.available)
+            return false
+        end
+    end
+    true
+end
+
+function select_var_in_order(s)
+    i=1
+    for c in s.courses
+        if c.date === nothing
+            return (i,c.name)
+        end
+        i+=1
+    end
+end
+function select_val_in_order(s::Schedule,course_index::Int)
+    s.courses[course_index].available
+end
+function no_inference(s::Schedule)
+    nothing
+end
+function goal_test(s::Schedule)
+   all(course.date ≠ nothing for course in s.courses) && scheduleConstraints(s) 
+end
+
+function backtracking_search(s::Schedule;
+                            select_unassigned_variable::Function=select_var_in_order,
+                            order_domain_values::Function=select_val_in_order,
+                            inference::Function=no_inference)
+    inference(s)
+    local result = backtrack(s,
+                            select_unassigned_variable=select_unassigned_variable,
+                                    order_domain_values=select_val_in_order,
+                                    inference=inference);
+    if (!(typeof(result) <: Nothing || goal_test(result)))
+        error("BacktrackingSearchError: Unexpected result!")
+    end
+    return result;
+end
+function backtrack(s::Schedule;
+                    select_unassigned_variable::Function=select_var_in_order,
+                    order_domain_values::Function=select_val_in_order,
+                    inference::Function=no_inference)
+    if goal_test(s)
+        return s
+    end
+    
+    (course_index,course_name)=select_unassigned_variable(s)
+    for course_date in order_domain_values(s,course_index)
+        s_copy=deepcopy(s)
+        s_copy.courses[course_index].date=course_date
+        if scheduleConstraints(s_copy)
+            inference(s_copy)
+            #println(s_copy)
+            result=backtrack(s_copy,select_unassigned_variable=select_unassigned_variable,order_domain_values=order_domain_values,inference=inference)
+            if result ≠ nothing
+                return result
+            end
+        end
+        
+    end
+    return nothing
+end
