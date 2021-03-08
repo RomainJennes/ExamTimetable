@@ -16,21 +16,17 @@ mutable struct Course
 end
 
 mutable struct Schedule
-    courses::Dict{String,Course}
+    courses::Vector{Course}
     firstdate::Date
     lastdate::Date
     period::Array{Date,1}
-    names
+    names::Vector{String}
     dates
-    function Schedule(c::Vector{Course},firstdate::Date,lastdate::Date)
-        courses = Dict{String,Course}()
-        for course in c
-            courses[course.name] = course
-        end
+    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date)
+        names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
-        schedule = new(courses,firstdate,lastdate,dates)
-        schedule.names = () -> schedule.courses.keys
-        schedule.dates = () -> vcat([collect(schedule.courses[i].date:Day(1):(schedule.courses[i].date+schedule.courses[i].Ndays-Day(1))) for i in findall(x -> !isnothing(x.date),schedule.courses)]...)
+        schedule = new(courses,firstdate,lastdate,dates,names)
+        schedule.dates = () -> unique(vcat([collect(schedule.courses[i].date:Day(1):(schedule.courses[i].date+schedule.courses[i].Ndays-Day(1))) for i in findall(x -> !isnothing(x.date),schedule.courses)]...))
         schedule
     end
 end
@@ -38,13 +34,13 @@ end
 
 function apply_prep!(s::Schedule)
     dates = s.dates()
-    for (name,course) in s.courses
+    for course in s.courses
         if course.date === nothing
             for date in dates
                 course.available = filter(x -> x ∉ date:Day(1):(date+Day(course.prep_days)),course.available)
             end
         else
-            for (name,course2) in s.courses
+            for course2 in s.courses
                 if course2.date === nothing
                     course2.available = filter(x -> x ∉ (course.date-course.prep_days):Day(1):course.date,course2.available)
                 end
@@ -58,11 +54,8 @@ function Base.show(io::IO,s::Schedule)
     dates = s.period
     date2ind = d -> findlast(x -> x==d,dates)
     array = zeros(length(s.courses),length(dates))
-    i = 0
     names = Array{String,1}()
-    for (name,course) in s.courses
-        i = i+1
-        push!(names,name)
+    for (i,course) in enumerate(s.courses)
         if course.date === nothing
             array[i,date2ind.(course.available)] .= 1
         else
@@ -75,8 +68,9 @@ function Base.show(io::IO,s::Schedule)
 #     RGBA(0/255,255/255,255/255),
 #     RGBA(255/255,255/255,255/255)])
     
-    display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,6.5),yticks=(collect(1:i),names),
-            xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,xtickfontvalign=:vcenter,
+    i = length(s.courses)
+    display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,6.5),yticks=(collect(1:i),s.names),
+            xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
             clim=(0,2),color=cgrad([:red, :green, :yellow]),colorbar=:none,
             grid=:all, gridalpha=1, gridlinewidth=2))
     
@@ -88,17 +82,17 @@ function n_available(c::Course)
 end
 
 function apply_arc_consistency!(s::Schedule)
-    for (name,course) in s.courses
+    for (i,course) in enumerate(s.courses)
         
         if course.date === nothing
             removed = false
             for (date_index,date) in enumerate(course.available)
                 
                 s_test=deepcopy(s)
-                s_test.courses[name].date=date
+                s_test.courses[i].date=date
                 apply_prep!(s_test)
                 if any(n_available.(values(s_test.courses)).==0)
-                    deleteat!(s.courses[name].available,date_index)
+                    deleteat!(s.courses[i].available,date_index)
                     removed=true
                 end
             end
