@@ -46,10 +46,36 @@ function apply_prep!(s::Schedule)
                 end
             end
         end
-        if course.Ndays > 1
+        if course.Ndays > Day(1) 
             check_Ndays!(course)
         end
     end 
+end
+
+function check_Ndays!(c::Course)
+    if isempty(c.available)
+        return
+    end
+    count = 1
+    prev_day = c.available[1]
+    for (i,day) in enumerate(c.available[2:end])
+
+        if day == prev_day+Day(1)
+            count = count+1
+        elseif Day(count) < c.Ndays
+            interval = (prev_day-Day(count+1)):Day(1):prev_day
+            c.available = filter(x -> x ∉ interval,c.available)
+            count = 1
+        else
+            count = 1
+        end
+
+        prev_day = day
+    end
+    if Day(count) < c.Ndays
+        interval = prev_day-Day(count+1):Day(1):prev_day
+        c.available = filter(x -> x ∉ interval,c.available)
+    end
 end
 
 function Base.show(io::IO,s::Schedule)
