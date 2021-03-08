@@ -3,7 +3,7 @@ function MCV(courses)
     for i = 1:length(courses)
         push!(available_days,length(courses[i].available))
     end
-    available_days = sort!(available_days)
-    # trouver le cours qui correspond au 1e dans l'ordre
+    (value, coord) = findmin(available_days)
+    return courses[coord].name
     # appliquer la méthode LCV pour ce cours
 end
