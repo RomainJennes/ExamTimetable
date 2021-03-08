@@ -46,6 +46,9 @@ function apply_prep!(s::Schedule)
                 end
             end
         end
+        if course.Ndays > 1
+            check_Ndays!(course)
+        end
     end 
 end
 
