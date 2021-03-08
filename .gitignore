@@ -31,3 +31,6 @@ Manifest.toml
 # ours
 .ipynb*
 >>>>>>> 2bd88a7d8db4f20c05a7c54741f42013237ede61
+
+# Individual tests
+Untitled.ipynb
