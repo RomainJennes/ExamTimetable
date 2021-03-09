@@ -32,6 +32,8 @@ mutable struct Schedule
 end
 
 
+
+
 function apply_prep!(s::Schedule)
     dates = s.dates()
     for course in s.courses
@@ -40,6 +42,7 @@ function apply_prep!(s::Schedule)
                 course.available = filter(x -> x ∉ date:Day(1):(date+Day(course.prep_days)),course.available)
             end
         else
+        	# course.available = s.period
             for course2 in s.courses
                 if course2.date === nothing
                     course2.available = filter(x -> x ∉ (course.date-course.prep_days):Day(1):course.date,course2.available)
@@ -219,10 +222,15 @@ function MCV(s::Schedule)
     courses = s.courses
     available_days = Vector{}()
     for i = 1:length(courses)
-        push!(available_days,length(courses[i].available))
+    	if courses[i].date === nothing
+        	push!(available_days,length(courses[i].available))
+        else
+        	push!(available_days,Inf)
+        end
     end
-    (value, coord) = findmin(available_days)
-    return coord
+    (value, course_index) = findmin(available_days)
+    course_name = s.courses[course_index].name
+    return course_index, course_name
 end
 
 function scheduleConstraints(s::Schedule)
