@@ -32,6 +32,8 @@ mutable struct Schedule
 end
 
 
+
+
 function apply_prep!(s::Schedule)
     dates = s.dates()
     for course in s.courses
@@ -40,6 +42,7 @@ function apply_prep!(s::Schedule)
                 course.available = filter(x -> x ∉ date:Day(1):(date+Day(course.prep_days)),course.available)
             end
         else
+        	# course.available = s.period
             for course2 in s.courses
                 if course2.date === nothing
                     course2.available = filter(x -> x ∉ (course.date-course.prep_days):Day(1):course.date,course2.available)
@@ -215,7 +218,24 @@ function import_excel(filename::String)
     Schedule(courses,firstdate,lastdate)
 end;
 
+<<<<<<< HEAD
 
+=======
+function MCV(s::Schedule)
+    courses = s.courses
+    available_days = Vector{}()
+    for i = 1:length(courses)
+    	if courses[i].date === nothing
+        	push!(available_days,length(courses[i].available))
+        else
+        	push!(available_days,Inf)
+        end
+    end
+    (value, course_index) = findmin(available_days)
+    course_name = s.courses[course_index].name
+    return course_index, course_name
+end
+>>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
 
 function scheduleConstraints(s::Schedule)
     for c1 in s.courses
@@ -292,6 +312,7 @@ function backtrack(s::Schedule;
     end
     return nothing
 end
+<<<<<<< HEAD
 
 function MCV(s::Schedule)
     courses = s.courses
@@ -324,3 +345,5 @@ function LCV(s::Schedule,courseIndex::Int64)
     sort!(d, by = x -> x[1])    
     return getindex.(d,2)
 end
+=======
+>>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
