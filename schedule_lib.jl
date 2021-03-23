@@ -219,6 +219,9 @@ function import_excel(filename::String)
     Schedule(courses,firstdate,lastdate)
 end;
 
+<<<<<<< HEAD
+
+=======
 function MCV(s::Schedule)
     courses = s.courses
     available_days = Vector{}()
@@ -233,6 +236,7 @@ function MCV(s::Schedule)
     course_name = s.courses[course_index].name
     return course_index, course_name
 end
+>>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
 
 function scheduleConstraints(s::Schedule)
     for c1 in s.courses
@@ -313,3 +317,38 @@ function backtrack(s::Schedule;
     end
     return nothing
 end
+<<<<<<< HEAD
+
+function MCV(s::Schedule)
+    courses = s.courses
+    available_days = Vector{}()
+    for i = 1:length(courses)
+        push!(available_days,length(courses[i].available))
+    end
+    (value, coord) = findmin(available_days)
+    return coord
+end
+
+function greendays(s::Schedule)
+    res = 0
+    for course in s.courses
+        res = res + length(course.available)
+    end
+    res
+end
+
+function LCV(s::Schedule,courseIndex::Int64)
+    
+    d = Vector{Tuple{Int64,Date}}()
+    for date in s.courses[courseIndex].available
+        s_copy = deepcopy(s)
+        s_copy.courses[courseIndex].date = date
+        apply_prep!(s_copy)
+        val = greendays(s_copy)
+        push!(d,(val,date))
+    end
+    sort!(d, by = x -> x[1])    
+    return getindex.(d,2)
+end
+=======
+>>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
