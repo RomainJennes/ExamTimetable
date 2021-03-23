@@ -23,7 +23,6 @@ mutable struct Schedule
     names::Vector{String}
     dates
     function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date)
-    	sort!(courses,by=x -> x.name[end-2:end])
         names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
         schedule = new(courses,firstdate,lastdate,dates,names)
@@ -31,8 +30,6 @@ mutable struct Schedule
         schedule
     end
 end
-
-
 
 
 function apply_prep!(s::Schedule)
@@ -43,7 +40,6 @@ function apply_prep!(s::Schedule)
                 course.available = filter(x -> x ∉ date:Day(1):(date+Day(course.prep_days)),course.available)
             end
         else
-        	# course.available = s.period
             for course2 in s.courses
                 if course2.date === nothing
                     course2.available = filter(x -> x ∉ (course.date-course.prep_days):Day(1):course.date,course2.available)
@@ -192,11 +188,11 @@ function import_excel(filename::String)
     xf = XLSX.readxlsx(filename)
     sh = xf[XLSX.sheetnames(xf)[1]]
     data = sh[:]
-    data = data[:,1:8] # 7 premières lignes
+    data = data[:,1:7]
     
     # Check data
     params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
-                         "oral/written"; "start date"; "final date";""])
+                         "oral/written"; "start date"; "final date"])
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
     # Exam period
@@ -219,24 +215,15 @@ function import_excel(filename::String)
     Schedule(courses,firstdate,lastdate)
 end;
 
-<<<<<<< HEAD
-
-=======
 function MCV(s::Schedule)
     courses = s.courses
     available_days = Vector{}()
     for i = 1:length(courses)
-    	if courses[i].date === nothing
-        	push!(available_days,length(courses[i].available))
-        else
-        	push!(available_days,Inf)
-        end
+        push!(available_days,length(courses[i].available))
     end
-    (value, course_index) = findmin(available_days)
-    course_name = s.courses[course_index].name
-    return course_index, course_name
+    (value, coord) = findmin(available_days)
+    return coord
 end
->>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
 
 function scheduleConstraints(s::Schedule)
     for c1 in s.courses
@@ -265,15 +252,12 @@ function select_var_in_order(s)
         i+=1
     end
 end
-
 function select_val_in_order(s::Schedule,course_index::Int)
     s.courses[course_index].available
 end
-
 function no_inference(s::Schedule)
     nothing
 end
-
 function goal_test(s::Schedule)
    all(course.date ≠ nothing for course in s.courses) && scheduleConstraints(s) 
 end
@@ -292,7 +276,6 @@ function backtracking_search(s::Schedule;
     end
     return result;
 end
-
 function backtrack(s::Schedule;
                     select_unassigned_variable::Function=select_var_in_order,
                     order_domain_values::Function=select_val_in_order,
@@ -317,38 +300,47 @@ function backtrack(s::Schedule;
     end
     return nothing
 end
-<<<<<<< HEAD
 
-function MCV(s::Schedule)
-    courses = s.courses
-    available_days = Vector{}()
-    for i = 1:length(courses)
-        push!(available_days,length(courses[i].available))
+function writeExcel(s::Schedule,filename::String)
+    dates = s.period
+    date2ind = d -> findlast(x -> x==d,dates)
+    array=Array{String,2}(undef,length(s.courses),length(dates))
+    fill!(array,"")
+    #array = zeros(length(s.courses),length(dates))
+    names = Array{String,1}()
+    for (i,course) in enumerate(s.courses)
+        if course.date === nothing
+            #array[i,date2ind.(course.available)] .= ""
+        else
+            #array[i,:] .= ""
+            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= "Exam"
+        end
     end
-    (value, coord) = findmin(available_days)
-    return coord
-end
-
-function greendays(s::Schedule)
-    res = 0
-    for course in s.courses
-        res = res + length(course.available)
-    end
-    res
-end
-
-function LCV(s::Schedule,courseIndex::Int64)
+    println(array)
+    #arrays=string.(array)
     
-    d = Vector{Tuple{Int64,Date}}()
-    for date in s.courses[courseIndex].available
-        s_copy = deepcopy(s)
-        s_copy.courses[courseIndex].date = date
-        apply_prep!(s_copy)
-        val = greendays(s_copy)
-        push!(d,(val,date))
+    #println(arrays)
+    array=[hcat(s.names) array]
+    arrayv=[array[:,x] for x in 1:size(array,2)] #Need to be a column vector
+    #println(dates)
+    #println((array))
+    #println((ar))
+    println(["Names\\Dates",collect(dates)...])
+    file=filename*".xlsx";
+    proms=append!(string.(1:5).*"POL",string.(1:4).*"SSMW");
+    XLSX.openxlsx(file, mode="w") do xf #Attention : if the file is open it would be an error and if the file already exist it is erased
+        #First sheet : overview
+        sheet = xf[1]    
+        XLSX.rename!(sheet, "Overview")
+        XLSX.writetable!(sheet, arrayv, ["Names\\Dates",collect(dates)...], anchor_cell=XLSX.CellRef("B2"))
+        
+        
+        
+        XLSX.addsheet!(xf, "Professor")
+        for prom in proms
+            XLSX.addsheet!(xf, prom)
+        end
     end
-    sort!(d, by = x -> x[1])    
-    return getindex.(d,2)
 end
-=======
->>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
+
+
