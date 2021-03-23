@@ -260,12 +260,15 @@ function select_var_in_order(s)
         i+=1
     end
 end
+
 function select_val_in_order(s::Schedule,course_index::Int)
     s.courses[course_index].available
 end
+
 function no_inference(s::Schedule)
     nothing
 end
+
 function goal_test(s::Schedule)
    all(course.date ≠ nothing for course in s.courses) && scheduleConstraints(s) 
 end
@@ -284,6 +287,7 @@ function backtracking_search(s::Schedule;
     end
     return result;
 end
+
 function backtrack(s::Schedule;
                     select_unassigned_variable::Function=select_var_in_order,
                     order_domain_values::Function=select_val_in_order,
