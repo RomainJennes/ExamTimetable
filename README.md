@@ -1,15 +1,14 @@
 # ExamTimetable
 
-| :black_square_button: To do| :heavy_check_mark: Done | 
-| ------ | ------ | 
-| :black_square_button: Easy app for user | :heavy_check_mark: MCV |
-| :black_square_button: Multiple proms | :heavy_check_mark: Nbre days exam |
-| :black_square_button: Superposition for oral | :heavy_check_mark: Arc consistency |
-| :black_square_button: Multiple faculties |   :heavy_check_mark: Read input data from Excel |
-| :black_square_button: Supervisor (2places) |  :heavy_check_mark: Backtracking  |
-| :black_square_button: Classroom availability | :heavy_check_mark: LCV |
-| :black_square_button: Output in Excel |  |
-| :black_square_button: Pilots courses |  |
+| :black_square_button: To do | :muscle: Work in progress | :heavy_check_mark: Done | 
+| ------ | ------ | ------ | 
+| :black_square_button: Easy app for user | :muscle: Multiple proms/faculties | :heavy_check_mark: MCV |
+| :black_square_button: Classroom availability | :muscle: Weekends | :heavy_check_mark: Nbre days exam |
+| :black_square_button: Supervisor (2places) | :muscle: Output in Excel | :heavy_check_mark: Arc consistency |
+|  | :muscle: Pilots courses |  :heavy_check_mark: Read input data from Excel |
+|  | :muscle: Superposition for oral | :heavy_check_mark: Backtracking  |
+|  | | :heavy_check_mark: LCV |
+
 
 
 ## Who does what ?
