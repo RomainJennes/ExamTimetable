@@ -10,17 +10,13 @@
 | :black_square_button: Classroom availability | :heavy_check_mark: LCV |
 | :black_square_button: Output in Excel |  |
 | :black_square_button: Pilots courses |  |
-|  |  |
-|  |  |
-|  |  |
-|  |  |
-|  |  |
+
 
 ## Who does what ?
-- Backtracking ==> Marius
-- Nbr days exam ==> Marius
-- MCV: Most constrained variable + LCV: Least constraining value ==> Larissa
-- Arc consistency ==> Romain
-- superposition for oral ==> Max
-- Read input data from excel
-- Multiple proms 
+
+- Multiple proms (struct prof) ==> Remacle
+- Weekends ==> Dehart
+- output Excel schedule + prof ==> Marius
+- pilots + oraux ==> Jennes
+- Excel input pas d'availabilities juste prof
+- Excel input profs => days ok
