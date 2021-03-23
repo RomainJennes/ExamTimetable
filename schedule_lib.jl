@@ -23,6 +23,7 @@ mutable struct Schedule
     names::Vector{String}
     dates
     function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date)
+    	sort!(courses,by=x -> x.name[end-2:end])
         names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
         schedule = new(courses,firstdate,lastdate,dates,names)
@@ -191,11 +192,11 @@ function import_excel(filename::String)
     xf = XLSX.readxlsx(filename)
     sh = xf[XLSX.sheetnames(xf)[1]]
     data = sh[:]
-    data = data[:,1:7]
+    data = data[:,1:8] # 7 premières lignes
     
     # Check data
     params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
-                         "oral/written"; "start date"; "final date"])
+                         "oral/written"; "start date"; "final date";""])
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
     # Exam period
