@@ -35,9 +35,15 @@ mutable struct Schedule
 end
 
 
-
+function verify_date(c1_copy,c2,date)
+    c1_copy.date=date
+    checkconstraintcouple(c1_copy,c2) && checkconstraintcouple(c2,c1_copy)
+end
 
 function apply_prep!(s::Schedule)
+        
+    """
+    Legacy:
     dates = s.dates()
     for course in s.courses
         if course.date === nothing
@@ -56,6 +62,17 @@ function apply_prep!(s::Schedule)
             check_Ndays!(course)
         end
     end 
+    """
+    
+    for c1 in s.courses
+        if c1.date==nothing
+            c1_copy=deepcopy(c1)
+            for c2 in s.courses
+                c1.available=filter(date -> verify_date(c1_copy,c2,date),c1.available)
+            end
+        end
+    end
+
 end
 
 function check_Ndays!(c::Course)
@@ -236,7 +253,7 @@ function import_excel(filename::String)
         push!(courses,course)
     end
     Schedule(courses,firstdate,lastdate)
-end;
+end
 
 
 function MCV(s::Schedule)
@@ -266,18 +283,28 @@ end
 
 function scheduleConstraints(s::Schedule)
     for c1 in s.courses
-        if c1.date ≠ nothing
-            for c2 in s.courses
-                if c2.date ≠ nothing && c1 ≠ c2 && is_neighbour(c1,c2)
-                    if c1.date ∈ c2.date:Day(1):(c2.date+c1.prep_days+c2.Ndays-Day(1))
-                        return false
-                    end
-                end
-            end
-        end
-        if c1.date ≠ nothing && (c1.date ∉ c1.available || c1.date+c1.Ndays -Day(1) ∉ c1.available)
+        if !checkconstraintsingle(c1)
             return false
         end
+        for c2 in s.courses
+            if !checkconstraintcouple(c1,c2)
+                return false
+            end
+        end
+    end
+    true
+end
+
+function checkconstraintsingle(c1::Course)
+    !(c1.date ≠ nothing && (c1.date ∉ c1.available || c1.date+c1.Ndays -Day(1) ∉ c1.available))
+end
+
+
+function checkconstraintcouple(c1::Course,c2::Course)
+    if c2.date ≠nothing
+        tocheck= c2.date ≠ nothing && c1.date ≠ nothing && c1 ≠ c2 && is_neighbour(c1,c2)
+        checkok=c1.date ∉ c2.date:Day(1):(c2.date+c1.prep_days+c2.Ndays-Day(1))
+        return !tocheck || checkok
     end
     true
 end
