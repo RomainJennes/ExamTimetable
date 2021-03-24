@@ -8,10 +8,12 @@ mutable struct Course
     available::Array{Date,1}
     date::Union{Date,Nothing}
     Ndays::Day
+    promotions::Array{Int,1}
+    groups::Dict{String,Array{String,1}}
     
-    
-    function Course(name::String,prep_days::Union{Day,Int64},available::Array{Date,1};Ndays::Union{Day,Int64}=1,date::Union{Date,Nothing}=nothing)
-        new(name,Day(prep_days),available,date,Day(Ndays))
+    function Course(name::String,prep_days::Union{Day,Int64},available::Array{Date,1},promotions::Array{Int,1};
+            Ndays::Union{Day,Int64}=1,date::Union{Date,Nothing}=nothing, groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}())
+        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups)
     end
 end
 
@@ -23,7 +25,7 @@ mutable struct Schedule
     names::Vector{String}
     dates
     function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date)
-    	sort!(courses,by=x -> x.name[end-2:end])
+        sort!(courses,by=x -> x.name[end-2:end])
         names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
         schedule = new(courses,firstdate,lastdate,dates,names)
@@ -43,7 +45,7 @@ function apply_prep!(s::Schedule)
                 course.available = filter(x -> x ∉ date:Day(1):(date+Day(course.prep_days)),course.available)
             end
         else
-        	# course.available = s.period
+            # course.available = s.period
             for course2 in s.courses
                 if course2.date === nothing
                     course2.available = filter(x -> x ∉ (course.date-course.prep_days):Day(1):course.date,course2.available)
@@ -192,57 +194,81 @@ function import_excel(filename::String)
     xf = XLSX.readxlsx(filename)
     sh = xf[XLSX.sheetnames(xf)[1]]
     data = sh[:]
-    data = data[:,1:8] # 7 premières lignes
+    data = data[:,1:9] # 9 premières lignes
     
     # Check data
     params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
-                         "oral/written"; "start date"; "final date";""])
+                         "oral/written";"Promotions";"Groups"; "start date"; "final date"])
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
     # Exam period
-    @assert all(isa.([data[2,6],data[2,7]],Date)) "Please provide date format in columns F and G"
-    firstdate = data[2,6]
-    lastdate = data[2,7]
+    @assert all(isa.([data[2,8],data[2,9]],Date)) "Please provide date format in columns H and I"
+    firstdate = data[2,8]
+    lastdate = data[2,9]
     
-    data = data[2:end,1:5]
-    @assert !any(isa.(data,Missing)) "Incomplete excel table"
+    data = data[2:end,:]
+    @assert !any(isa.(data[:,1:6],Missing)) "Incomplete excel table"
     courses = Vector{Course}()
     for i = 1:size(data,1)
         name = data[i,1]
         prep_days = data[i,4]
         Ndays = data[i,3]
         available = get_available(data[i,2],firstdate,lastdate)
+        reg=r"^([0-9]+,?)+$"
+        @assert occursin(reg,string(data[i,6])) "Please specify promotion and use the correct format: prom1,prom2"
+        promotions=map(a->parse(Int,a), split(string(data[i,6]),","))
         
-        course = Course(name,prep_days,available;Ndays=Ndays)
+        reg=r"^([a-zA-Z0-9_]+=([a-zA-Z0-9_]+,?)+;?)*$"
+        if isa(data[i,7],Missing)
+            data[i,7]=""
+        end
+        @assert occursin(reg,data[i,7]) "Please use the correct format for groups (example: BHK=pilot,CIS;EnglishLevel=1)"
+        groups=Dict{String,Array{String,1}}()
+        for couple in split(data[i,7],";")
+            if couple==""
+                continue
+            end
+            r=split(couple,"=")
+            groups[r[1]]=split(r[2],",")
+        end
+        
+        course = Course(name,prep_days,available,promotions;Ndays=Ndays,groups=groups)
         push!(courses,course)
     end
     Schedule(courses,firstdate,lastdate)
 end;
 
-<<<<<<< HEAD
 
-=======
 function MCV(s::Schedule)
     courses = s.courses
     available_days = Vector{}()
     for i = 1:length(courses)
-    	if courses[i].date === nothing
-        	push!(available_days,length(courses[i].available))
+        if courses[i].date === nothing
+            push!(available_days,length(courses[i].available))
         else
-        	push!(available_days,Inf)
+            push!(available_days,Inf)
         end
     end
     (value, course_index) = findmin(available_days)
     course_name = s.courses[course_index].name
     return course_index, course_name
 end
->>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
+
+
+function is_neighbour(course1::Course,course2::Course)
+    """
+    Returns true if the two courses are connected on the constraint graph i.e. some student can follow both courses
+    """
+    common_keywords=intersect(keys(course1.groups),keys(course2.groups))
+    no_common_groups=[isempty(intersect(course1.groups[k],course2.groups[k])) for k in common_keywords]
+    return !isempty(intersect(course1.promotions,course2.promotions)) && (isempty(common_keywords) || !any(no_common_groups))
+end
 
 function scheduleConstraints(s::Schedule)
     for c1 in s.courses
         if c1.date ≠ nothing
             for c2 in s.courses
-                if c2.date ≠ nothing && c1 ≠ c2
+                if c2.date ≠ nothing && c1 ≠ c2 && is_neighbour(c1,c2)
                     if c1.date ∈ c2.date:Day(1):(c2.date+c1.prep_days+c2.Ndays-Day(1))
                         return false
                     end
@@ -260,7 +286,7 @@ function select_var_in_order(s)
     i=1
     for c in s.courses
         if c.date === nothing
-            return (i,c.name)
+            return i
         end
         i+=1
     end
@@ -301,7 +327,9 @@ function backtrack(s::Schedule;
         return s
     end
     
-    (course_index,course_name)=select_unassigned_variable(s)
+    course_index=select_unassigned_variable(s)
+    #print(course_index)
+    #println(s.courses[course_index].date)
     for course_date in order_domain_values(s,course_index)
         s_copy=deepcopy(s)
         s_copy.courses[course_index].date=course_date
@@ -317,13 +345,16 @@ function backtrack(s::Schedule;
     end
     return nothing
 end
-<<<<<<< HEAD
 
 function MCV(s::Schedule)
     courses = s.courses
     available_days = Vector{}()
     for i = 1:length(courses)
-        push!(available_days,length(courses[i].available))
+        if courses[i].date==nothing
+            push!(available_days,length(courses[i].available))
+        else
+            push!(available_days,Inf)
+        end
     end
     (value, coord) = findmin(available_days)
     return coord
@@ -350,5 +381,4 @@ function LCV(s::Schedule,courseIndex::Int64)
     sort!(d, by = x -> x[1])    
     return getindex.(d,2)
 end
-=======
->>>>>>> 5b910cccc903462f450ce6bfe5eba86d185dc72e
+
