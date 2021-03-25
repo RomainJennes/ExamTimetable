@@ -10,10 +10,11 @@ mutable struct Course
     Ndays::Day
     promotions::Array{Int,1}
     groups::Dict{String,Array{String,1}}
+    weekend::String
     
-    function Course(name::String,prep_days::Union{Day,Int64},available::Array{Date,1},promotions::Array{Int,1};
+    function Course(name::String,prep_days::Union{Day,Int64},available::Array{Date,1},promotions::Array{Int,1},weekend::String;
             Ndays::Union{Day,Int64}=1,date::Union{Date,Nothing}=nothing, groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}())
-        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups)
+        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups,weekend)
     end
 end
 
@@ -448,5 +449,15 @@ function writeExcel(s::Schedule,filename::String)
         for prom in proms
             XLSX.addsheet!(xf, prom)
         end
+    end
+end
+
+function isweekend(d::Date)
+    issaturday = d->Dates.dayofweek(d) == Dates.Saturday
+    issunday = d->Dates.dayofweek(d) == Dates.Sunday
+    if issaturday(d) || issunday(d) == true
+        return true
+    else
+        return false
     end
 end
