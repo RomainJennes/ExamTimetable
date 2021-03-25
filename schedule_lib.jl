@@ -212,11 +212,11 @@ function import_excel(filename::String)
     xf = XLSX.readxlsx(filename)
     sh = xf[XLSX.sheetnames(xf)[1]]
     data = sh[:]
-    data = data[:,1:9] # 9 premières lignes
+    data = data[:,1:10] # 10 premières colonnes
     
     # Check data
     params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
-                         "oral/written";"Promotions";"Groups"; "start date"; "final date"])
+                         "oral/written";"Promotions";"Groups"; "start date"; "final date";"is weekend ok?"])
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
     # Exam period
@@ -250,7 +250,8 @@ function import_excel(filename::String)
             groups[r[1]]=split(r[2],",")
         end
         
-        course = Course(name,prep_days,available,promotions;Ndays=Ndays,groups=groups)
+        weekend=data[i,10]
+        course = Course(name,prep_days,available,promotions,weekend;Ndays=Ndays,groups=groups)
         push!(courses,course)
     end
     Schedule(courses,firstdate,lastdate)
