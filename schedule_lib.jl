@@ -11,10 +11,19 @@ mutable struct Course
     promotions::Array{Int,1}
     groups::Dict{String,Array{String,1}}
     weekend::String
+    closeto::Union{Nothing,Array{String,1}}
     
-    function Course(name::String,prep_days::Union{Day,Int64},available::Array{Date,1},promotions::Array{Int,1},weekend::String;
-            Ndays::Union{Day,Int64}=1,date::Union{Date,Nothing}=nothing, groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}())
-        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups,weekend)
+    function Course(name::String,
+            prep_days::Union{Day,Int64},
+            available::Array{Date,1},
+            promotions::Array{Int,1},
+            weekend::String;
+            Ndays::Union{Day,Int64}=1,
+            date::Union{Date,Nothing}=nothing,
+            groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}(),
+            closeto::Union{Nothing,Array{T,1}}=nothing) where T <: AbstractString
+        
+        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups,weekend,closeto)
     end
 end
 
@@ -212,11 +221,11 @@ function import_excel(filename::String)
     xf = XLSX.readxlsx(filename)
     sh = xf[XLSX.sheetnames(xf)[1]]
     data = sh[:]
-    data = data[:,1:10] # 10 premières colonnes
+    data = data[:,1:11] # 11 premières colonnes
     
     # Check data
     params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
-                         "oral/written";"Promotions";"Groups"; "start date"; "final date";"is weekend ok?"])
+                         "oral/written";"Promotions";"Groups"; "start date"; "final date";"close to";"is weekend ok?"])
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
     # Exam period
@@ -232,11 +241,11 @@ function import_excel(filename::String)
         prep_days = data[i,4]
         Ndays = data[i,3]
         available = get_available(data[i,2],firstdate,lastdate)
-        reg=r"^([0-9]+,?)+$"
+        reg=r"^([0-9]+\s*,?\s*)+$"
         @assert occursin(reg,string(data[i,6])) "Please specify promotion and use the correct format: prom1,prom2"
         promotions=map(a->parse(Int,a), split(string(data[i,6]),","))
         
-        reg=r"^([a-zA-Z0-9_]+=([a-zA-Z0-9_]+,?)+;?)*$"
+        reg=r"^([a-zA-Z0-9_]+=([a-zA-Z0-9_]+\s*,?\s*)+\s*;?\s*)*$"
         if isa(data[i,7],Missing)
             data[i,7]=""
         end
@@ -250,8 +259,18 @@ function import_excel(filename::String)
             groups[r[1]]=split(r[2],",")
         end
         
-        weekend=data[i,10]
-        course = Course(name,prep_days,available,promotions,weekend;Ndays=Ndays,groups=groups)
+        
+        
+        if !isa(data[i,10],Missing)
+            closeto=split(data[i,10],r"\s*,\s*")
+            @assert all(map(x-> x ∈ data[:,1], closeto)) "Please use a correct for exams closed to each other"
+            
+        else
+            closeto=nothing
+        end
+        
+        weekend=data[i,11]
+        course = Course(name,prep_days,available,promotions,weekend;Ndays=Ndays,groups=groups,closeto=closeto)
         push!(courses,course)
     end
     Schedule(courses,firstdate,lastdate)
