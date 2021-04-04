@@ -5,10 +5,11 @@
 | :black_square_button: Easy app for user | :muscle: Multiple proms/faculties | :heavy_check_mark: MCV |
 | :black_square_button: Classroom availability | :muscle: Weekends | :heavy_check_mark: Nbre days exam |
 | :black_square_button: Supervisor (2places) | :muscle: Output in Excel | :heavy_check_mark: Arc consistency |
-|  | :muscle: Superposition for oral |  :heavy_check_mark: Read input data from Excel |
+|  | |  :heavy_check_mark: Read input data from Excel |
 |  | | :heavy_check_mark: Backtracking  |
 |  | | :heavy_check_mark: LCV | 
 |  | |  :heavy_check_mark: Pilots courses|
+|  | |  :heavy_check_mark: Superposition for oral |
 
 
 ## Who does what ?
