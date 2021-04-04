@@ -11,19 +11,21 @@ mutable struct Course
     promotions::Array{Int,1}
     groups::Dict{String,Array{String,1}}
     weekend::String
-    closeto::Union{Nothing,Array{String,1}}
+    coursegroup::Union{Nothing,String}
+    oral::Bool
     
     function Course(name::String,
             prep_days::Union{Day,Int64},
             available::Array{Date,1},
             promotions::Array{Int,1},
-            weekend::String;
+            weekend::String,
+            oral::Bool;
             Ndays::Union{Day,Int64}=1,
             date::Union{Date,Nothing}=nothing,
             groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}(),
-            closeto::Union{Nothing,Array{T,1}}=nothing) where T <: AbstractString
+            coursegroup::Union{Nothing,AbstractString}=nothing)
         
-        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups,weekend,closeto)
+        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups,weekend,coursegroup,oral)
     end
 end
 
@@ -34,12 +36,14 @@ mutable struct Schedule
     period::Array{Date,1}
     names::Vector{String}
     dates
-    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date)
+    coursegroups::Dict{String,Array{String,1}}
+    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date;coursegroups::Dict{String,Array{String,1}}=Dict{String,Array{Int,1}}())
         sort!(courses,by=x -> x.name[end-2:end])
         names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
         schedule = new(courses,firstdate,lastdate,dates,names)
         schedule.dates = () -> unique(vcat([collect(schedule.courses[i].date:Day(1):(schedule.courses[i].date+schedule.courses[i].Ndays-Day(1))) for i in findall(x -> !isnothing(x.date),schedule.courses)]...))
+        schedule.coursegroups=coursegroups
         schedule
     end
 end
@@ -127,7 +131,7 @@ function Base.show(io::IO,s::Schedule)
     end
     
     i = length(s.courses)
-    display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,6.5),yticks=(collect(1:i),s.names),
+    display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,i+0.5),yticks=(collect(1:i),s.names),
             xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
             clim=(-1,2),color=cgrad([:lightgrey, :red, :green, :yellow]),colorbar=:none,
             grid=:all, gridalpha=1, gridlinewidth=2))
@@ -225,7 +229,7 @@ function import_excel(filename::String)
     
     # Check data
     params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
-                         "oral/written";"Promotions";"Groups"; "start date"; "final date";"close to";"is weekend ok?"])
+                         "oral/written";"Promotions";"student groups"; "start date"; "final date";"course group";"is weekend ok?"])
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
     # Exam period
@@ -236,6 +240,7 @@ function import_excel(filename::String)
     data = data[2:end,:]
     @assert !any(isa.(data[:,1:6],Missing)) "Incomplete excel table"
     courses = Vector{Course}()
+    coursegroups=Dict{String,Array{String,1}}()
     for i = 1:size(data,1)
         name = data[i,1]
         prep_days = data[i,4]
@@ -251,29 +256,46 @@ function import_excel(filename::String)
         end
         @assert occursin(reg,data[i,7]) "Please use the correct format for groups (example: BHK=pilot,CIS;EnglishLevel=1)"
         groups=Dict{String,Array{String,1}}()
-        for couple in split(data[i,7],";")
+        for couple in split(data[i,7],r"\s*;\s*")
             if couple==""
                 continue
             end
             r=split(couple,"=")
-            groups[r[1]]=split(r[2],",")
+            groups[r[1]]=split(r[2],r"\s*,\s*")
         end
         
-        
-        
-        if !isa(data[i,10],Missing)
-            closeto=split(data[i,10],r"\s*,\s*")
-            @assert all(map(x-> x ∈ data[:,1], closeto)) "Please use a correct for exams closed to each other"
-            
+        if isa(data[i,10],Missing)
+            coursegroup=nothing
         else
-            closeto=nothing
+            reg=r"^([a-zA-Z0-9_]+\s*)?$"
+            @assert occursin(reg,data[i,10])
+            coursegroup=data[i,10]
+            firstindex=findfirst([c.coursegroup==coursegroup for c in courses])
+            @assert firstindex==nothing || courses[firstindex].prep_days==Day(prep_days) "Different exams on following days should have the same number of preparation days"
+            if coursegroup ∈ keys(coursegroups)
+                push!(coursegroups[coursegroup],name)
+            else
+                coursegroups[coursegroup]=[name]
+            end
         end
-        
         weekend=data[i,11]
-        course = Course(name,prep_days,available,promotions,weekend;Ndays=Ndays,groups=groups,closeto=closeto)
+        oral=lowercase(data[i,5])
+        @assert oral=="oral" || oral=="written" "Please use the correct format: oral or written"
+        oral= oral=="oral"
+        
+        course = Course(name,prep_days,available,promotions,weekend,oral;Ndays=Ndays,groups=groups,coursegroup=coursegroup)
         push!(courses,course)
+        
+        #equ=[c.name == coursegroup for c in courses]
+        #if coursegroupe != nothing && !any(equ)
+        #    push!(courses,course)
+        #else
+        #    i=findfirst(equ)
+        #    push!(courses[i].coursegroup,course)
+        #end
+        
     end
-    Schedule(courses,firstdate,lastdate)
+    Schedule(courses,firstdate,lastdate,coursegroups=coursegroups)
 end
 
 
@@ -313,7 +335,7 @@ function scheduleConstraints(s::Schedule)
             end
         end
     end
-    true
+    return checkcontraintgroups(s)
 end
 
 function checkconstraintsingle(c1::Course)
@@ -322,15 +344,51 @@ end
 
 
 function checkconstraintcouple(c1::Course,c2::Course)
-    if c2.date ≠nothing
-        tocheck= c2.date ≠ nothing && c1.date ≠ nothing && c1 ≠ c2 && is_neighbour(c1,c2)
-        checkok=c1.date ∉ c2.date:Day(1):(c2.date+c1.prep_days+c2.Ndays-Day(1))
+    if c2.date ≠nothing && c1.date ≠ nothing
+        tocheck= c2.date ≠ nothing && c1.date ≠ nothing && c1.name ≠ c2.name && is_neighbour(c1,c2) && c1.date>=c2.date
+        if c1.oral && c2.oral
+            if c1.coursegroup==nothing || c2.coursegroup != c1.coursegroup
+                checkok= min(c1.date-c2.date, c1.date+c1.Ndays-c2.date-c2.Ndays)>c1.prep_days
+            else
+                checkok= min(c1.date-c2.date, c1.date+c1.Ndays-c2.date-c2.Ndays)>Day(0)
+            end
+            
+        else
+            if c1.coursegroup==nothing || c2.coursegroup != c1.coursegroup
+                checkok=c1.date ∉ c2.date:Day(1):(c2.date+c1.prep_days+c2.Ndays-Day(1))
+            else
+                checkok=c1.date ∉ c2.date:Day(1):(c2.date+c2.Ndays-Day(1))
+            end
+        end
+        
         return !tocheck || checkok
     end
-    true
+    return true
 end
 
-function select_var_in_order(s)
+function checkcontraintgroups(s::Schedule)
+    for (g,cs) in s.coursegroups
+        dates=[]
+        Ndays=Day(0)
+        for c in cs
+            i=findfirst([x.name==c for x in s.courses])
+            
+            Ndays+=s.courses[i].Ndays
+            if s.courses[i].date != nothing
+                push!(dates,s.courses[i].date)
+            end
+        end
+        if length(dates)>1
+            j=findfirst([x.date==max(dates...) for x in s.courses])
+            if max(dates...)-min(dates...)+s.courses[j].Ndays > Ndays
+                return false
+            end
+        end
+    end
+    return true
+end
+
+function select_var_in_order(s::Schedule)
     i=1
     for c in s.courses
         if c.date === nothing
