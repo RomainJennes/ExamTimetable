@@ -177,6 +177,9 @@ end
 
 function get_available(unavailable::String,firstdate::Date,lastdate::Date)
     dates = collect(firstdate:Day(1):lastdate)
+    if unavailable == "0"
+    	return dates
+    end
     unavailable = filter(x -> !isspace(x), unavailable)
     unavailable = split(unavailable,";")
     for str in unavailable
@@ -259,6 +262,9 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
     
     sz = sum(.!isa.(data[:,1],Missing))
     data = data[2:sz,:]
+    col2=data[:,2]
+    col2[isa.(col2,Missing)] .= "0"
+    data[:,2]=col2
     @assert !any(isa.(data[:,1:6],Missing)) "Incomplete excel table"
     courses = Vector{Course}()
     coursegroups=Dict{String,Array{String,1}}()
