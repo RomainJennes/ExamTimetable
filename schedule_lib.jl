@@ -26,7 +26,7 @@ mutable struct Course
             groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}(),
             coursegroup::Union{Nothing,AbstractString}=nothing)
         
-        new(name,Day(prep_days),available,date,Day(Ndays),promotions,groups,weekend,coursegroup,oral)
+        new(name,Day(prep_days),available,date,Day(Ndays),promotions,weekend,groups,coursegroup,oral)
     end
 end
 
@@ -300,7 +300,6 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
             end
         end
         weekend=data[i,11]
-        println(weekend)
         if weekend == "no"
             filter!(!isweekend,available)
         end
