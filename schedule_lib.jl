@@ -1,6 +1,7 @@
 using Plots
 using Dates
 using XLSX
+using Base.Threads
 
 mutable struct Course
     name::String
@@ -37,13 +38,15 @@ mutable struct Schedule
     names::Vector{String}
     dates
     coursegroups::Dict{String,Array{String,1}}
-    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date;coursegroups::Dict{String,Array{String,1}}=Dict{String,Array{Int,1}}())
+    prom::String
+    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date;coursegroups::Dict{String,Array{String,1}}=Dict{String,Array{Int,1}}(),prom::String="172 POL")
         sort!(courses,by=x -> x.name[end-2:end])
         names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
         schedule = new(courses,firstdate,lastdate,dates,names)
         schedule.dates = () -> unique(vcat([collect(schedule.courses[i].date:Day(1):(schedule.courses[i].date+schedule.courses[i].Ndays-Day(1))) for i in findall(x -> !isnothing(x.date),schedule.courses)]...))
         schedule.coursegroups=coursegroups
+        schedule.prom=prom
         schedule
     end
 end
@@ -115,6 +118,12 @@ function check_Ndays!(c::Course)
     end
 end
 
+function Base.show(io::IO,schedules::Vector{Schedule})
+	for schedule in schedules
+		print(schedule)
+	end
+end
+
 function Base.show(io::IO,s::Schedule)
     
     dates = s.period
@@ -131,10 +140,10 @@ function Base.show(io::IO,s::Schedule)
     end
     
     i = length(s.courses)
-    display(heatmap(array,aspect_ratio=:equal,ylim=(0.5,i+0.5),yticks=(collect(1:i),s.names),
+    display(heatmap(array,title=s.prom,aspect_ratio=:equal,ylim=(0.5,i+0.5),yticks=(collect(1:i),s.names),
             xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
             clim=(-1,2),color=cgrad([:lightgrey, :red, :green, :yellow]),colorbar=:none,
-            grid=:all, gridalpha=1, gridlinewidth=2))
+            grid=:all, gridalpha=1, gridlinewidth=2));
     
 end
 
@@ -219,17 +228,28 @@ function get_available(unavailable::String,firstdate::Date,lastdate::Date)
 end    
 
 function import_excel(filename::String)
+	@assert occursin("xlsx",filename) "Please provide an excel file"
+	names = XLSX.sheetnames(XLSX.readxlsx(filename))
+	schedules = [import_excel_sheet(filename,name) for name in names]
+end
+
+function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
     
     # Get data
     @assert occursin("xlsx",filename) "Please provide an excel file"
     xf = XLSX.readxlsx(filename)
-    sh = xf[XLSX.sheetnames(xf)[1]]
+    if typeof(sheet)==Int64
+    	sheet = XLSX.sheetnames(xf)[sheet]
+    end
+    prom=sheet
+	sh = xf[prom]
     data = sh[:]
-    data = data[:,1:11] # 11 premières colonnes
+    data = data[1:20,1:11] # 11 first columns, max 19 courses 
     
     # Check data
     params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
                          "oral/written";"Promotions";"student groups"; "start date"; "final date";"course group";"is weekend ok?"])
+
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
     # Exam period
@@ -237,7 +257,8 @@ function import_excel(filename::String)
     firstdate = data[2,8]
     lastdate = data[2,9]
     
-    data = data[2:end,:]
+    sz = sum(.!isa.(data[:,1],Missing))
+    data = data[2:sz,:]
     @assert !any(isa.(data[:,1:6],Missing)) "Incomplete excel table"
     courses = Vector{Course}()
     coursegroups=Dict{String,Array{String,1}}()
@@ -295,7 +316,7 @@ function import_excel(filename::String)
         #end
         
     end
-    Schedule(courses,firstdate,lastdate,coursegroups=coursegroups)
+    Schedule(courses,firstdate,lastdate,coursegroups=coursegroups,prom=prom)
 end
 
 
@@ -410,15 +431,43 @@ function goal_test(s::Schedule)
    all(course.date ≠ nothing for course in s.courses) && scheduleConstraints(s) 
 end
 
+
+function backtracking_search(schedules::Vector;
+                            select_unassigned_variable::Function=select_var_in_order,
+                            order_domain_values::Function=select_val_in_order,
+                            inference::Function=no_inference)
+
+	filter!(x -> isa(x,Schedule),schedules)
+
+	lk = ReentrantLock()
+	@threads for i in 1:length(schedules)
+	local res
+		res = backtracking_search(deepcopy(schedules[i]),select_unassigned_variable=select_unassigned_variable
+											,order_domain_values=order_domain_values,inference=inference)
+
+		lock(lk) do
+			if res !== nothing
+				schedules[i] = res
+			end
+		end
+	end
+	schedules
+end
+
+
 function backtracking_search(s::Schedule;
                             select_unassigned_variable::Function=select_var_in_order,
                             order_domain_values::Function=select_val_in_order,
                             inference::Function=no_inference)
+
     inference(s)
     local result = backtrack(s,
                             select_unassigned_variable=select_unassigned_variable,
-                                    order_domain_values=select_val_in_order,
+                                    order_domain_values=order_domain_values,
                                     inference=inference);
+    if result == nothing
+    	@warn "No solution found"
+    end
     if (!(typeof(result) <: Nothing || goal_test(result)))
         error("BacktrackingSearchError: Unexpected result!")
     end
@@ -433,7 +482,7 @@ function backtrack(s::Schedule;
         return s
     end
     
-    course_index=select_unassigned_variable(s)
+    course_index=select_unassigned_variable(s)[1]
     #print(course_index)
     #println(s.courses[course_index].date)
     for course_date in order_domain_values(s,course_index)
