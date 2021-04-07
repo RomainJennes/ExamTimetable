@@ -10,8 +10,8 @@ mutable struct Course
     date::Union{Date,Nothing}
     Ndays::Day
     promotions::Array{Int,1}
-    groups::Dict{String,Array{String,1}}
     weekend::String
+    groups::Dict{String,Array{String,1}}
     coursegroup::Union{Nothing,String}
     oral::Bool
     
@@ -229,7 +229,7 @@ end
 
 function import_excel(filename::String)
 	@assert occursin("xlsx",filename) "Please provide an excel file"
-	names = XLSX.sheetnames(XLSX.readxlsx(filename))
+	names = XLSX.sheetnames(XLSX.readxlsx(filename))[2:end]
 	schedules = [import_excel_sheet(filename,name) for name in names]
 end
 
@@ -300,6 +300,11 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
             end
         end
         weekend=data[i,11]
+        println(weekend)
+        if weekend == "no"
+            filter!(!isweekend,available)
+        end
+        
         oral=lowercase(data[i,5])
         @assert oral=="oral" || oral=="written" "Please use the correct format: oral or written"
         oral= oral=="oral"
@@ -501,19 +506,6 @@ function backtrack(s::Schedule;
     return nothing
 end
 
-function MCV(s::Schedule)
-    courses = s.courses
-    available_days = Vector{}()
-    for i = 1:length(courses)
-        if courses[i].date==nothing
-            push!(available_days,length(courses[i].available))
-        else
-            push!(available_days,Inf)
-        end
-    end
-    (value, coord) = findmin(available_days)
-    return coord
-end
 
 function greendays(s::Schedule)
     res = 0
