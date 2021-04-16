@@ -232,7 +232,7 @@ end
 
 function import_excel(filename::String)
 	@assert occursin("xlsx",filename) "Please provide an excel file"
-	names = XLSX.sheetnames(XLSX.readxlsx(filename))[2:end]
+	names = XLSX.sheetnames(XLSX.readxlsx(filename))
 	schedules = [import_excel_sheet(filename,name) for name in names]
 end
 
