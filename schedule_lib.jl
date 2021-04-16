@@ -3,6 +3,17 @@ using Dates
 using XLSX
 using Base.Threads
 
+
+mutable struct Professor
+	name::String
+
+	function Professor(name::String)
+		name = lowercase.(name)
+		name = uppercase(name[1]) * name[2:end]
+		new(name)
+	end
+end
+
 mutable struct Course
     name::String
     prep_days::Day
@@ -14,6 +25,7 @@ mutable struct Course
     groups::Dict{String,Array{String,1}}
     coursegroup::Union{Nothing,String}
     oral::Bool
+    prof::Union{Nothing,Professor}
     
     function Course(name::String,
             prep_days::Union{Day,Int64},
@@ -24,9 +36,10 @@ mutable struct Course
             Ndays::Union{Day,Int64}=1,
             date::Union{Date,Nothing}=nothing,
             groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}(),
-            coursegroup::Union{Nothing,AbstractString}=nothing)
+            coursegroup::Union{Nothing,AbstractString}=nothing,
+            prof::Union{Nothing,Professor}=nothing)
         
-        new(name,Day(prep_days),available,date,Day(Ndays),promotions,weekend,groups,coursegroup,oral)
+        new(name,Day(prep_days),available,date,Day(Ndays),promotions,weekend,groups,coursegroup,oral,prof)
     end
 end
 
@@ -250,7 +263,7 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
     data = data[1:20,1:11] # 11 first columns, max 19 courses 
     
     # Check data
-    params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
+    params = lowercase.(["Name"; "Professor"; "Amount days"; "preparation days";
                          "oral/written";"Promotions";"student groups"; "start date"; "final date";"course group";"is weekend ok?"])
 
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
@@ -262,17 +275,14 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
     
     sz = sum(.!isa.(data[:,1],Missing))
     data = data[2:sz,:]
-    col2=data[:,2]
-    col2[isa.(col2,Missing)] .= "0"
-    data[:,2]=col2
-    @assert !any(isa.(data[:,1:6],Missing)) "Incomplete excel table"
+    @assert !any(isa.(data[:,3:6],Missing)) "Incomplete excel table"
     courses = Vector{Course}()
     coursegroups=Dict{String,Array{String,1}}()
     for i = 1:size(data,1)
         name = data[i,1]
         prep_days = data[i,4]
         Ndays = data[i,3]
-        available = get_available(data[i,2],firstdate,lastdate)
+        available = get_available("0",firstdate,lastdate)
         reg=r"^([0-9]+\s*,?\s*)+$"
         @assert occursin(reg,string(data[i,6])) "Please specify promotion and use the correct format: prom1,prom2"
         promotions=map(a->parse(Int,a), split(string(data[i,6]),","))
@@ -314,7 +324,13 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
         @assert oral=="oral" || oral=="written" "Please use the correct format: oral or written"
         oral= oral=="oral"
         
-        course = Course(name,prep_days,available,promotions,weekend,oral;Ndays=Ndays,groups=groups,coursegroup=coursegroup)
+        prof = data[i,2]
+        if isa(prof,Missing)
+        	prof = nothing
+        else
+        	prof = Professor(prof)
+        end
+        course = Course(name,prep_days,available,promotions,weekend,oral;Ndays=Ndays,groups=groups,coursegroup=coursegroup,prof=prof)
         push!(courses,course)
         
         #equ=[c.name == coursegroup for c in courses]
