@@ -3,30 +3,43 @@ using Dates
 using XLSX
 using Base.Threads
 
+
+mutable struct Professor
+	name::String
+	available::Array{Date,1}
+	parallel_exams::Int
+
+	function Professor(name::String,available::Array{Date,1},parallel_exams::Int)
+		name = lowercase.(name)
+		name = uppercase(name[1]) * name[2:end]
+		new(name,available,parallel_exams)
+	end
+end
+
 mutable struct Course
     name::String
     prep_days::Day
     available::Array{Date,1}
     date::Union{Date,Nothing}
     Ndays::Day
-    promotions::Array{Int,1}
-    weekend::String
+    promotion::String
     groups::Dict{String,Array{String,1}}
     coursegroup::Union{Nothing,String}
     oral::Bool
+    prof::Union{Nothing,Professor}
     
     function Course(name::String,
             prep_days::Union{Day,Int64},
             available::Array{Date,1},
-            promotions::Array{Int,1},
-            weekend::String,
+            promotion::String,
             oral::Bool;
             Ndays::Union{Day,Int64}=1,
             date::Union{Date,Nothing}=nothing,
             groups::Dict{String,Array{String,1}}=Dict{String,Array{String,1}}(),
-            coursegroup::Union{Nothing,AbstractString}=nothing)
+            coursegroup::Union{Nothing,AbstractString}=nothing,
+            prof::Union{Nothing,Professor}=nothing)
         
-        new(name,Day(prep_days),available,date,Day(Ndays),promotions,weekend,groups,coursegroup,oral)
+        new(name,Day(prep_days),available,date,Day(Ndays),promotion,groups,coursegroup,oral,prof)
     end
 end
 
@@ -38,15 +51,13 @@ mutable struct Schedule
     names::Vector{String}
     dates
     coursegroups::Dict{String,Array{String,1}}
-    prom::String
-    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date;coursegroups::Dict{String,Array{String,1}}=Dict{String,Array{Int,1}}(),prom::String="172 POL")
+    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date;coursegroups::Dict{String,Array{String,1}}=Dict{String,Array{Int,1}}())
         sort!(courses,by=x -> x.name[end-2:end])
         names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
         schedule = new(courses,firstdate,lastdate,dates,names)
         schedule.dates = () -> unique(vcat([collect(schedule.courses[i].date:Day(1):(schedule.courses[i].date+schedule.courses[i].Ndays-Day(1))) for i in findall(x -> !isnothing(x.date),schedule.courses)]...))
         schedule.coursegroups=coursegroups
-        schedule.prom=prom
         schedule
     end
 end
@@ -124,26 +135,34 @@ function Base.show(io::IO,schedules::Vector{Schedule})
 	end
 end
 
+
 function Base.show(io::IO,s::Schedule)
     
+    proms = [course.promotion for course in s.courses]
+    proms = unique!(proms)
+
     dates = s.period
     date2ind = d -> findlast(x -> x==d,dates)
     array = zeros(length(s.courses),length(dates))
     names = Array{String,1}()
-    for (i,course) in enumerate(s.courses)
-        if course.date === nothing
-            array[i,date2ind.(course.available)] .= 1
-        else
-            array[i,:] .= -1
-            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= 2
-        end
-    end
-    
-    i = length(s.courses)
-    display(heatmap(array,title=s.prom,aspect_ratio=:equal,ylim=(0.5,i+0.5),yticks=(collect(1:i),s.names),
-            xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
-            clim=(-1,2),color=cgrad([:lightgrey, :red, :green, :yellow]),colorbar=:none,
-            grid=:all, gridalpha=1, gridlinewidth=2));
+
+    for prom in proms
+    	courses = s.courses[findall(x-> x.promotion==prom,s.courses)]
+	    for (i,course) in enumerate(courses)
+	        if course.date === nothing
+	            array[i,date2ind.(course.available)] .= 1
+	        else
+	            array[i,:] .= -1
+	            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= 2
+	        end
+	    end
+	    
+	    i = length(courses)
+	    display(heatmap(array,title=prom,aspect_ratio=:equal,ylim=(0.5,i+0.5),yticks=(collect(1:i),s.names),
+	            xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
+	            clim=(-1,2),color=cgrad([:lightgrey, :red, :green, :yellow]),colorbar=:none,
+	            grid=:all, gridalpha=1, gridlinewidth=2));
+	end
     
 end
 
@@ -230,14 +249,72 @@ function get_available(unavailable::String,firstdate::Date,lastdate::Date)
     dates
 end    
 
-function import_excel(filename::String)
+function import_prof(filename::String)
+	@assert occursin("xlsx",filename) "Please provide an excel file"
+	xf = XLSX.readxlsx(filename)
+	name = XLSX.sheetnames(xf)[1]
+	sheet = xf[name]
+	data = sheet[:]
+	data = data[:,1:6]
+	params = lowercase.(["Name","unavailability","parallel exams","start date","final date","is weekend ok? (yes/no)"])
+        
+    @assert all(isa.([data[2,4],data[2,5]],Date)) "Please provide date format in columns D and E"
+    firstdate = data[2,4]
+    lastdate = data[2,5]
+
+    sz = sum(.!isa.(data[:,1],Missing))
+    data = data[2:sz,:]
+    @assert !any(isa.(data[:,3],Missing)) "Incomplete excel table"
+
+    professors = Vector{Professor}()
+    for i in 1:size(data,1)
+    	name = data[i,1]
+    	unavailable = data[i,2]
+    	if isa(unavailable,Missing)
+    		unavailable = "0"
+    	end
+    	available = get_available(unavailable,firstdate,lastdate)
+    	parallel_exams = data[i,3]
+
+    	weekend=data[i,6]
+        if weekend == "no"
+            filter!(!isweekend,available)
+        end
+
+
+        prof = Professor(name,available,parallel_exams)
+    	push!(professors,prof)
+    end
+    professors
+end
+        
+
+function import_excel(filename::String,professors::Vector{Professor})
+
+	dates = Vector{Date}()
+    for prof in professors
+    	[push!(dates,date) for date in prof.available]
+    end
+    firstdate = min(dates...)
+    lastdate = max(dates...)
+
+    courses = Vector{Course}()
+    coursegroups=Dict{String,Array{String,1}}()
+
 	@assert occursin("xlsx",filename) "Please provide an excel file"
 	names = XLSX.sheetnames(XLSX.readxlsx(filename))
-	schedules = [import_excel_sheet(filename,name) for name in names]
+	for name in names
+		(some_courses,some_coursegroups) = import_excel_sheet(filename,professors,name)
+		push!(courses,some_courses...)
+		merge!(coursegroups,some_coursegroups)
+	end
+	Schedule(courses,firstdate,lastdate,coursegroups=coursegroups)
 end
 
-function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
+function import_excel_sheet(filename::String,professors::Vector{Professor},sheet::Union{String,Int64}=1)
     
+    prof_names = [lowercase.(prof.name) for prof in professors]
+
     # Get data
     @assert occursin("xlsx",filename) "Please provide an excel file"
     xf = XLSX.readxlsx(filename)
@@ -247,35 +324,28 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
     prom=sheet
 	sh = xf[prom]
     data = sh[:]
-    data = data[1:20,1:11] # 11 first columns, max 19 courses 
+    data = data[1:20,1:8] # 11 first columns, max 19 courses 
     
     # Check data
-    params = lowercase.(["Name"; "unavailability"; "Amount days"; "preparation days";
-                         "oral/written";"Promotions";"student groups"; "start date"; "final date";"course group";"is weekend ok?"])
+    params = lowercase.(["Name"; "Professor"; "Amount days"; "preparation days";
+                         "oral/written";"promotion";"student groups";"course group"])
 
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
-    # Exam period
-    @assert all(isa.([data[2,8],data[2,9]],Date)) "Please provide date format in columns H and I"
-    firstdate = data[2,8]
-    lastdate = data[2,9]
     
     sz = sum(.!isa.(data[:,1],Missing))
     data = data[2:sz,:]
-    col2=data[:,2]
-    col2[isa.(col2,Missing)] .= "0"
-    data[:,2]=col2
-    @assert !any(isa.(data[:,1:6],Missing)) "Incomplete excel table"
+    @assert !any(isa.(data[:,3:6],Missing)) "Incomplete excel table"
     courses = Vector{Course}()
     coursegroups=Dict{String,Array{String,1}}()
     for i = 1:size(data,1)
         name = data[i,1]
         prep_days = data[i,4]
         Ndays = data[i,3]
-        available = get_available(data[i,2],firstdate,lastdate)
-        reg=r"^([0-9]+\s*,?\s*)+$"
-        @assert occursin(reg,string(data[i,6])) "Please specify promotion and use the correct format: prom1,prom2"
-        promotions=map(a->parse(Int,a), split(string(data[i,6]),","))
+        # reg=r"^([0-9]+\s*,?\s*)+$"
+        # @assert occursin(reg,string(data[i,6])) "Please specify promotion and use the correct format: prom1,prom2"
+        # promotion=map(a->parse(Int,a), split(string(data[i,6]),","))
+        promotion = string(data[i,6])
         
         reg=r"^([a-zA-Z0-9_]+=([a-zA-Z0-9_]+\s*,?\s*)+\s*;?\s*)*$"
         if isa(data[i,7],Missing)
@@ -291,12 +361,12 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
             groups[r[1]]=split(r[2],r"\s*,\s*")
         end
         
-        if isa(data[i,10],Missing)
+        if isa(data[i,8],Missing)
             coursegroup=nothing
         else
             reg=r"^([a-zA-Z0-9_]+\s*)?$"
-            @assert occursin(reg,data[i,10])
-            coursegroup=data[i,10]
+            @assert occursin(reg,data[i,8])
+            coursegroup=data[i,8]
             firstindex=findfirst([c.coursegroup==coursegroup for c in courses])
             @assert firstindex==nothing || courses[firstindex].prep_days==Day(prep_days) "Different exams on following days should have the same number of preparation days"
             if coursegroup ∈ keys(coursegroups)
@@ -305,28 +375,20 @@ function import_excel_sheet(filename::String,sheet::Union{String,Int64}=1)
                 coursegroups[coursegroup]=[name]
             end
         end
-        weekend=data[i,11]
-        if weekend == "no"
-            filter!(!isweekend,available)
-        end
         
         oral=lowercase(data[i,5])
         @assert oral=="oral" || oral=="written" "Please use the correct format: oral or written"
-        oral= oral=="oral"
+        oral = oral=="oral"
         
-        course = Course(name,prep_days,available,promotions,weekend,oral;Ndays=Ndays,groups=groups,coursegroup=coursegroup)
+        prof_name = lowercase.(data[i,2])
+        @assert prof_name ∈ prof_names "Unknown professor"
+        prof = professors[findfirst(prof_names.==prof_name)]
+
+        course = Course(name,prep_days,copy(prof.available),promotion,oral;Ndays=Ndays,groups=groups,coursegroup=coursegroup,prof=prof)
         push!(courses,course)
         
-        #equ=[c.name == coursegroup for c in courses]
-        #if coursegroupe != nothing && !any(equ)
-        #    push!(courses,course)
-        #else
-        #    i=findfirst(equ)
-        #    push!(courses[i].coursegroup,course)
-        #end
-        
     end
-    Schedule(courses,firstdate,lastdate,coursegroups=coursegroups,prom=prom)
+    (courses,coursegroups)
 end
 
 
@@ -352,7 +414,7 @@ function is_neighbour(course1::Course,course2::Course)
     """
     common_keywords=intersect(keys(course1.groups),keys(course2.groups))
     no_common_groups=[isempty(intersect(course1.groups[k],course2.groups[k])) for k in common_keywords]
-    return !isempty(intersect(course1.promotions,course2.promotions)) && (isempty(common_keywords) || !any(no_common_groups))
+    return !isempty(intersect(course1.promotion,course2.promotion)) && (isempty(common_keywords) || !any(no_common_groups))
 end
 
 function scheduleConstraints(s::Schedule)
@@ -442,28 +504,27 @@ function goal_test(s::Schedule)
 end
 
 
-function backtracking_search(schedules::Vector;
-                            select_unassigned_variable::Function=select_var_in_order,
-                            order_domain_values::Function=select_val_in_order,
-                            inference::Function=no_inference)
+# function backtracking_search(schedules::Vector;
+#                             select_unassigned_variable::Function=select_var_in_order,
+#                             order_domain_values::Function=select_val_in_order,
+#                             inference::Function=no_inference)
 
-	filter!(x -> isa(x,Schedule),schedules)
+# 	filter!(x -> isa(x,Schedule),schedules)
 
-	lk = ReentrantLock()
-	@threads for i in 1:length(schedules)
-	local res
-		res = backtracking_search(deepcopy(schedules[i]),select_unassigned_variable=select_unassigned_variable
-											,order_domain_values=order_domain_values,inference=inference)
+# 	lk = ReentrantLock()
+# 	@threads for i in 1:length(schedules)
+# 	local res
+# 		res = backtracking_search(deepcopy(schedules[i]),select_unassigned_variable=select_unassigned_variable
+# 											,order_domain_values=order_domain_values,inference=inference)
 
-		lock(lk) do
-			if res !== nothing
-				schedules[i] = res
-			end
-		end
-	end
-	schedules
-end
-
+# 		lock(lk) do
+# 			if res !== nothing
+# 				schedules[i] = res
+# 			end
+# 		end
+# 	end
+# 	schedules
+# end
 
 function backtracking_search(s::Schedule;
                             select_unassigned_variable::Function=select_var_in_order,
