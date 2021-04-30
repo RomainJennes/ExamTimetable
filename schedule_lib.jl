@@ -3,7 +3,6 @@ using Dates
 using XLSX
 using Base.Threads
 
-
 mutable struct Professor
 	name::String
 	available::Array{Date,1}
@@ -51,13 +50,16 @@ mutable struct Schedule
     names::Vector{String}
     dates
     coursegroups::Dict{String,Array{String,1}}
-    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date;coursegroups::Dict{String,Array{String,1}}=Dict{String,Array{Int,1}}())
+    professors::Vector{Professor}
+
+    function Schedule(courses::Vector{Course},firstdate::Date,lastdate::Date;coursegroups::Dict{String,Array{String,1}}=Dict{String,Array{Int,1}}(),professors::Vector{Professor}=Vector{Professor}())
         sort!(courses,by=x -> x.name[end-2:end])
         names = [c.name for c in courses]
         dates = firstdate:Day(1):lastdate
         schedule = new(courses,firstdate,lastdate,dates,names)
         schedule.dates = () -> unique(vcat([collect(schedule.courses[i].date:Day(1):(schedule.courses[i].date+schedule.courses[i].Ndays-Day(1))) for i in findall(x -> !isnothing(x.date),schedule.courses)]...))
         schedule.coursegroups=coursegroups
+        schedule.professors=professors
         schedule
     end
 end
@@ -69,28 +71,6 @@ function verify_date(c1_copy,c2,date)
 end
 
 function apply_prep!(s::Schedule)
-        
-    """
-    Legacy:
-    dates = s.dates()
-    for course in s.courses
-        if course.date === nothing
-            for date in dates
-                course.available = filter(x -> x ∉ date:Day(1):(date+Day(course.prep_days)),course.available)
-            end
-        else
-            # course.available = s.period
-            for course2 in s.courses
-                if course2.date === nothing
-                    course2.available = filter(x -> x ∉ (course.date-course.prep_days):Day(1):course.date,course2.available)
-                end
-            end
-        end
-        if course.Ndays > Day(1) 
-            check_Ndays!(course)
-        end
-    end 
-    """
     
     for c1 in s.courses
         if c1.date==nothing
@@ -309,7 +289,7 @@ function import_excel(filename::String,professors::Vector{Professor})
 		push!(courses,some_courses...)
 		merge!(coursegroups,some_coursegroups)
 	end
-	Schedule(courses,firstdate,lastdate,coursegroups=coursegroups)
+	Schedule(courses,firstdate,lastdate,coursegroups=coursegroups,professors=professors)
 end
 
 function import_excel_sheet(filename::String,professors::Vector{Professor},sheet::Union{String,Int64}=1)
@@ -440,6 +420,7 @@ end
 function checkconstraintcouple(c1::Course,c2::Course)
     if c2.date ≠nothing && c1.date ≠ nothing
         tocheck= c2.date ≠ nothing && c1.date ≠ nothing && c1.name ≠ c2.name && is_neighbour(c1,c2) && c1.date>=c2.date
+
         if c1.oral && c2.oral
             if c1.coursegroup==nothing || c2.coursegroup != c1.coursegroup
                 checkok= min(c1.date-c2.date, c1.date+c1.Ndays-c2.date-c2.Ndays)>c1.prep_days
@@ -504,29 +485,6 @@ function goal_test(s::Schedule)
    all(course.date ≠ nothing for course in s.courses) && scheduleConstraints(s) 
 end
 
-
-# function backtracking_search(schedules::Vector;
-#                             select_unassigned_variable::Function=select_var_in_order,
-#                             order_domain_values::Function=select_val_in_order,
-#                             inference::Function=no_inference)
-
-# 	filter!(x -> isa(x,Schedule),schedules)
-
-# 	lk = ReentrantLock()
-# 	@threads for i in 1:length(schedules)
-# 	local res
-# 		res = backtracking_search(deepcopy(schedules[i]),select_unassigned_variable=select_unassigned_variable
-# 											,order_domain_values=order_domain_values,inference=inference)
-
-# 		lock(lk) do
-# 			if res !== nothing
-# 				schedules[i] = res
-# 			end
-# 		end
-# 	end
-# 	schedules
-# end
-
 function backtracking_search(s::Schedule;
                             select_unassigned_variable::Function=select_var_in_order,
                             order_domain_values::Function=select_val_in_order,
@@ -555,8 +513,6 @@ function backtrack(s::Schedule;
     end
     
     course_index=select_unassigned_variable(s)[1]
-    #print(course_index)
-    #println(s.courses[course_index].date)
     for course_date in order_domain_values(s,course_index)
         s_copy=deepcopy(s)
         s_copy.courses[course_index].date=course_date
@@ -572,7 +528,6 @@ function backtrack(s::Schedule;
     end
     return nothing
 end
-
 
 function greendays(s::Schedule)
     res = 0
