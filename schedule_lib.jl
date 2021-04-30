@@ -595,46 +595,62 @@ function LCV(s::Schedule,courseIndex::Int64)
     return getindex.(d,2)
 end
 
-function writeExcel(s::Schedule,filename::String)
-    dates = s.period
-    date2ind = d -> findlast(x -> x==d,dates)
-    array=Array{String,2}(undef,length(s.courses),length(dates))
-    fill!(array,"")
-    #array = zeros(length(s.courses),length(dates))
-    names = Array{String,1}()
-    for (i,course) in enumerate(s.courses)
-        if course.date === nothing
-            #array[i,date2ind.(course.available)] .= ""
-        else
-            #array[i,:] .= ""
-            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= "Exam"
-        end
-    end
-    println(array)
-    #arrays=string.(array)
-    
-    #println(arrays)
-    array=[hcat(s.names) array]
-    arrayv=[array[:,x] for x in 1:size(array,2)] #Need to be a column vector
-    #println(dates)
-    #println((array))
-    #println((ar))
-    println(["Names\\Dates",collect(dates)...])
+function export_excel(s::Schedule,filename::String)
+    # Creation of the Excel file
     file=filename*".xlsx";
-    proms=append!(string.(1:5).*"POL",string.(1:4).*"SSMW");
     XLSX.openxlsx(file, mode="w") do xf #Attention : if the file is open it would be an error and if the file already exist it is erased
-        #First sheet : overview
-        sheet = xf[1]    
-        XLSX.rename!(sheet, "Overview")
-        XLSX.writetable!(sheet, arrayv, ["Names\\Dates",collect(dates)...], anchor_cell=XLSX.CellRef("B2"))
+        # We now can write whenever we want
+            # Initialisation of the data
+            sheetCtr=1
+            proms = [course.promotion for course in s.courses]
+            proms = unique!(proms)
+            dates = s.period
+            date2ind = d -> findlast(x -> x==d,dates)
+            array=Array{String,2}(undef,length(s.courses),length(dates))
+            fill!(array,"")
+            names = Array{String,1}()
+
+            # First do the overview
+            for (i,course) in enumerate(s.courses)
+                if course.date === nothing
+                else
+                    array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= "Exam"
+                end
+            end
+
+            array=[hcat(s.names) array]
+            arrayv=[array[:,x] for x in 1:size(array,2)] #Need to be a column vector
         
-        
-        
-        XLSX.addsheet!(xf, "Professor")
-        for prom in proms
-            XLSX.addsheet!(xf, prom)
-        end
+            #First sheet : overview
+            sheet = xf[1]
+            XLSX.rename!(sheet, "Overview")
+            XLSX.writetable!(sheet, arrayv, ["Names\\Dates",collect(dates)...], anchor_cell=XLSX.CellRef("A1"))
+
+        # We now do it for each prom
+            for prom in proms
+                courses = s.courses[findall(x-> x.promotion==prom,s.courses)]
+                coursenames = s.names[findall(x-> x.promotion==prom,s.courses)]
+                array=Array{String,2}(undef,length(courses),length(dates))
+                sheetCtr+=1
+                fill!(array,"")
+
+                for (i,course) in enumerate(courses)
+                     #coursenames = [coursenames course.name]
+                    if course.date === nothing
+                    else
+                        array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= "Exam"
+                    end
+                
+                end
+
+                array=[hcat(coursenames) array]
+                arrayv=[array[:,x] for x in 1:size(array,2)] #Need to be a column vector
+
+                XLSX.addsheet!(xf, prom)
+                XLSX.writetable!(xf[sheetCtr], arrayv, ["Names\\Dates",collect(dates)...], anchor_cell=XLSX.CellRef("A1"))
+            end
     end
+    println("Voici l'Excel que vous m'avez demandé !")
 end
 
 function isweekend(d::Date)
