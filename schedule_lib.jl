@@ -559,13 +559,15 @@ function export_excel(s::Schedule,filename::String)
             # Initialisation of the data
             sheetCtr=1
             proms = [course.promotion for course in s.courses]
+            courseproms = [course.promotion for course in s.courses]
+            courseprof = [course.prof.name for course in s.courses]
             proms = unique!(proms)
             dates = s.period
             date2ind = d -> findlast(x -> x==d,dates)
             array=Array{String,2}(undef,length(s.courses),length(dates))
             fill!(array,"")
             names = Array{String,1}()
-
+        
             # First do the overview
             for (i,course) in enumerate(s.courses)
                 if course.date === nothing
@@ -573,14 +575,18 @@ function export_excel(s::Schedule,filename::String)
                     array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= "Exam"
                 end
             end
-
-            array=[hcat(s.names) array]
+        
+        
+            courseprom=[course.promotion for course in s.courses]
+        
+        
+            array=[hcat(s.names) hcat(courseproms) hcat(courseprof) array]
             arrayv=[array[:,x] for x in 1:size(array,2)] #Need to be a column vector
         
             #First sheet : overview
             sheet = xf[1]
             XLSX.rename!(sheet, "Overview")
-            XLSX.writetable!(sheet, arrayv, ["Names\\Dates",collect(dates)...], anchor_cell=XLSX.CellRef("A1"))
+            XLSX.writetable!(sheet, arrayv, ["Names\\Dates","Prom", "Professor" ,collect(dates)...], anchor_cell=XLSX.CellRef("A1"))
 
         # We now do it for each prom
             for prom in proms
