@@ -143,11 +143,10 @@ function Base.show(io::IO,s::Schedule)
 
     dates = s.period
     date2ind = d -> findlast(x -> x==d,dates)
-    array = zeros(length(s.courses),length(dates))
-    names = Array{String,1}()
 
     for prom in proms
     	courses = s.courses[findall(x-> x.promotion==prom,s.courses)]
+    	array = zeros(length(courses),length(dates))
 	    for (i,course) in enumerate(courses)
 	        if course.date === nothing
 	            array[i,date2ind.(course.available)] .= 1
@@ -156,12 +155,14 @@ function Base.show(io::IO,s::Schedule)
 	            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= 2
 	        end
 	    end
-	    
+	    names = [c.name for c in courses]	    
 	    i = length(courses)
-	    display(heatmap(array,title=prom,aspect_ratio=:equal,ylim=(0.5,i+0.5),yticks=(collect(1:i),s.names),
+	    display(heatmap(array,title=prom,aspect_ratio=:equal,ylim=(0.5,i+0.5),yticks=(collect(1:i),names),
 	            xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
 	            clim=(-1,2),color=cgrad([:lightgrey, :red, :green, :yellow]),colorbar=:none,
 	            grid=:all, gridalpha=1, gridlinewidth=2));
+
+	    array = zeros(length(s.courses),length(dates))
 	end
     
 end
@@ -414,7 +415,7 @@ function is_neighbour(course1::Course,course2::Course)
     """
     common_keywords=intersect(keys(course1.groups),keys(course2.groups))
     no_common_groups=[isempty(intersect(course1.groups[k],course2.groups[k])) for k in common_keywords]
-    return !isempty(intersect(course1.promotion,course2.promotion)) && (isempty(common_keywords) || !any(no_common_groups))
+    return course1.promotion==course2.promotion && (isempty(common_keywords) || !any(no_common_groups))
 end
 
 function scheduleConstraints(s::Schedule)
