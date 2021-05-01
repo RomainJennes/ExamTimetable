@@ -153,6 +153,9 @@ function n_available(c::Course)
 end
 
 function apply_arc_consistency!(s::Schedule)
+    """
+    Applies the arc consistency by applying constraint propagation for each possible choice of variable and value
+    """
     for (i,course) in enumerate(s.courses)
         
         if course.date === nothing
@@ -168,7 +171,7 @@ function apply_arc_consistency!(s::Schedule)
                 end
             end
             if removed
-                apply_arc_consistency!(s) #because our constraints graph is fully connected 
+                apply_arc_consistency!(s)
             end
         end
     end
@@ -391,14 +394,24 @@ end
 
 function is_neighbour(course1::Course,course2::Course)
     """
-    Returns true if the two courses are connected on the constraint graph i.e. some student can follow both courses
+    Returns true if the two courses are connected on the constraint graph i.e. if some student can follow both courses
+    No student follows both if they share a keyword for which the value is different (e.g. component=land and component=navy,air)
+        or if the promotion is different
+    In all other cases, some combination of student properties leads him to follow both courses
     """
     common_keywords=intersect(keys(course1.groups),keys(course2.groups))
-    no_common_groups=[isempty(intersect(course1.groups[k],course2.groups[k])) for k in common_keywords]
-    return course1.promotion==course2.promotion && (isempty(common_keywords) || !any(no_common_groups))
+    has_common_values=[!isempty(intersect(course1.groups[k],course2.groups[k])) for k in common_keywords]
+    return course1.promotion==course2.promotion && (isempty(common_keywords) || all(has_common_values))
 end
 
 function scheduleConstraints(s::Schedule)
+    """
+    Master function for constraints application
+    Returns true if all contraints are satisfied in the current configuration
+    Uses checkconstraintsingle for constraints relative to one single course (e.g. availability days ...)
+    Uses checkconstraintcouple for constraints relative to two courses (e.g. not on the same day if they are neighbours ...)
+    Uses checkconstraintgroups for constraints relative to a groups of courses (e.g. SE422_written and SE422_oral that must be together ...)
+    """
     for c1 in s.courses
         if !checkconstraintsingle(c1)
             return false
@@ -413,11 +426,23 @@ function scheduleConstraints(s::Schedule)
 end
 
 function checkconstraintsingle(c1::Course)
+    """
+    Verifies the constraints related to a single course: all days of the exam are in the available days
+    Returns true if it's ok
+    """
     !(c1.date ≠ nothing && (c1.date ∉ c1.available || c1.date+c1.Ndays -Day(1) ∉ c1.available))
 end
 
 
 function checkconstraintcouple(c1::Course,c2::Course)
+    """
+    Verifies the constraints related to two courses: their can't be 2 exams at the same time and the preperation days are respected.
+    If they are both oral and on multiple days, then the preparation days should only be taken between the days of passage of a student.
+    We assume that the order of the students is the same for each oral exam.
+    In this case, the minimal days of preparation is reached the first or the last day of the exam. We take the minimum of those two
+    Constrains are directionnal so this should be called for c1,c2 and for c2,c1
+    Returns true if it's ok
+    """
     if c2.date ≠nothing && c1.date ≠ nothing
         tocheck= c2.date ≠ nothing && c1.date ≠ nothing && c1.name ≠ c2.name && is_neighbour(c1,c2) && c1.date>=c2.date
 
@@ -442,6 +467,10 @@ function checkconstraintcouple(c1::Course,c2::Course)
 end
 
 function checkcontraintgroups(s::Schedule)
+    """
+    Verifies if courses of a group (e.g. SE422_Written and SE422_oral are packed together)
+    Returns true if it's ok
+    """
     for (g,cs) in s.coursegroups
         dates=[]
         Ndays=Day(0)
