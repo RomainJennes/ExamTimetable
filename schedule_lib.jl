@@ -308,7 +308,7 @@ function import_excel_sheet(filename::String,professors::Vector{Professor},sheet
     prom=sheet
 	sh = xf[prom]
     data = sh[:]
-    data = data[1:20,1:8] # 11 first columns, max 19 courses 
+    data = data[:,1:8] # 11 first columns, max 19 courses 
     
     # Check data
     params = lowercase.(["Name"; "Professor"; "Amount days"; "preparation days";
@@ -316,9 +316,12 @@ function import_excel_sheet(filename::String,professors::Vector{Professor},sheet
 
     @assert params == lowercase.(data[1,:]) "Corrupted excel file, please use the appropriate template"
     
-    
+    #println(data[:,1])
+    #println(.!isa.(data[:,1],Missing))
     sz = sum(.!isa.(data[:,1],Missing))
+    #println(sz)
     data = data[2:sz,:]
+    #println(data)
     @assert !any(isa.(data[:,3:6],Missing)) "Incomplete excel table"
     courses = Vector{Course}()
     coursegroups=Dict{String,Array{String,1}}()
@@ -352,7 +355,7 @@ function import_excel_sheet(filename::String,professors::Vector{Professor},sheet
             @assert occursin(reg,data[i,8])
             coursegroup=data[i,8]
             firstindex=findfirst([c.coursegroup==coursegroup for c in courses])
-            @assert firstindex==nothing || courses[firstindex].prep_days==Day(prep_days) "Different exams on following days should have the same number of preparation days"
+            @assert firstindex==nothing || courses[firstindex].prep_days==Day(prep_days) "Different exams in the same coursegroup should have the same number of preparation days"
             if coursegroup ∈ keys(coursegroups)
                 push!(coursegroups[coursegroup],name)
             else
