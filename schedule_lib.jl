@@ -149,6 +149,7 @@ end
 
 function Base.show(io::IO,s::Schedule)
     
+    sleep(1e-3)
     proms = [course.promotion for course in s.courses]
     proms = unique!(proms)
 
@@ -172,6 +173,7 @@ function Base.show(io::IO,s::Schedule)
 	            xticks=(collect(1:length(dates)),dates[1:end]),xrotation=-90,
 	            clim=(-1,2),color=cgrad([:lightgrey, :red, :green, :yellow]),colorbar=:none,
 	            grid=:all, gridalpha=1, gridlinewidth=2));
+	    sleep(1e-3)
 
 	    array = zeros(length(s.courses),length(dates))
 	end
