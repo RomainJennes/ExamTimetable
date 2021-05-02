@@ -11,7 +11,7 @@ mutable struct Professor
 	function Professor(name::String,available::Array{Date,1},parallel_exams::Int)
 		name = lowercase.(name)
 		name = uppercase(name[1]) * name[2:end]
-		new(name,available,parallel_exams)
+		prof = new(name,available,parallel_exams)
 	end
 end
 
@@ -64,6 +64,42 @@ mutable struct Schedule
     end
 end
 
+function prof_availabilities!(s::Schedule)
+	for prof in s.professors
+		courses = filter(x -> x.prof==prof,s.courses)
+		for date in prof.available 
+			counter = 0
+			for c in courses
+				if c.date==date
+					if c.oral
+						filter!(x->x ∉ date:Day(1):date+c.Ndays-Day(1),prof.available)
+						break
+					else
+						counter = counter + 1
+						@assert counter <= prof.parallel_exams "To much exams for this professor"
+						# if counter == prof.parallel_exams
+						# 	filter!(x->x≠date,prof.available)
+						# 	break
+						# end
+					end
+				end
+			end
+			if counter >= 1
+				for c in courses
+					if c.date==nothing && c.oral
+						filter!(x->x≠date,c.available)
+					end
+				end
+			end
+		end
+		for course in courses
+			if course.date == nothing
+				filter!(x->x ∈ prof.available,course.available)
+			end
+		end
+	end
+end
+
 
 function verify_date(c1_copy,c2,date)
     c1_copy.date=date
@@ -72,6 +108,7 @@ end
 
 function apply_prep!(s::Schedule)
     
+    prof_availabilities!(s)
     for c1 in s.courses
         if c1.date==nothing
             c1_copy=deepcopy(c1)
@@ -107,12 +144,6 @@ function check_Ndays!(c::Course)
         interval = prev_day-Day(count+1):Day(1):prev_day
         c.available = filter(x -> x ∉ interval,c.available)
     end
-end
-
-function Base.show(io::IO,schedules::Vector{Schedule})
-	for schedule in schedules
-		print(schedule)
-	end
 end
 
 
@@ -447,7 +478,7 @@ function checkconstraintcouple(c1::Course,c2::Course)
     Returns true if it's ok
     """
     if c2.date ≠nothing && c1.date ≠ nothing
-        tocheck= c2.date ≠ nothing && c1.date ≠ nothing && c1.name ≠ c2.name && is_neighbour(c1,c2) && c1.date>=c2.date
+        tocheck= c2.date ≠ nothing && c1.date ≠ nothing && c1.name ≠ c2.name && is_neighbour(c1,c2) && c1.date>=c2.date 
 
         if c1.oral && c2.oral
             if c1.coursegroup==nothing || c2.coursegroup != c1.coursegroup
@@ -547,10 +578,10 @@ function backtrack(s::Schedule;
     course_index=select_unassigned_variable(s)[1]
     for course_date in order_domain_values(s,course_index)
         s_copy=deepcopy(s)
+        prof_availabilities!(s_copy)
         s_copy.courses[course_index].date=course_date
         if scheduleConstraints(s_copy)
             inference(s_copy)
-            #println(s_copy)
             result=backtrack(s_copy,select_unassigned_variable=select_unassigned_variable,order_domain_values=order_domain_values,inference=inference)
             if result ≠ nothing
                 return result
