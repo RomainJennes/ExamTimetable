@@ -7,11 +7,13 @@ mutable struct Professor
 	name::String
 	available::Array{Date,1}
 	parallel_exams::Int
-
-	function Professor(name::String,available::Array{Date,1},parallel_exams::Int)
+    exams::Array{Int,1}
+    
+	function Professor(name::String,available::Array{Date,1},parallel_exams::Int;s::Int=0)
 		name = lowercase.(name)
 		name = uppercase(name[1]) * name[2:end]
-		prof = new(name,available,parallel_exams)
+        exams=zeros(Int,s)
+		prof = new(name,available,parallel_exams,exams)
 	end
 end
 
@@ -63,6 +65,19 @@ mutable struct Schedule
         schedule
     end
 end
+function setDate!(s::Schedule,cindex::Int,date::Date)
+    c=s.courses[cindex]
+    c.date=date
+    prof_index=findfirst([p.name==c.prof.name for p in s.professors])
+    date_index=(date-s.firstdate).value+1
+    
+    prof=s.professors[prof_index]
+    if c.oral
+        prof.exams[date_index]+=prof.parallel_exams
+    else
+        prof.exams[date_index]+=1
+    end
+end
 
 function prof_availabilities!(s::Schedule)
 	for prof in s.professors
@@ -100,24 +115,52 @@ function prof_availabilities!(s::Schedule)
 	end
 end
 
+function check_prof_constraints(s::Schedule)
+    for prof in s.professors
+        if !all(prof.exams.<= prof.parallel_exams)
+            return false
+        end
+    end
+    return true
+end
 
-function verify_date(c1_copy,c2,date)
-    c1_copy.date=date
-    checkconstraintcouple(c1_copy,c2) && checkconstraintcouple(c2,c1_copy)
+function verify_date(c1,c2,date,s_copy)
+    setDate!(s_copy,findfirst([c1.name==c.name for c in s_copy.courses]),date)
+    checkconstraintcouple(c1,c2) && checkconstraintcouple(c2,c1)
 end
 
 function apply_prep!(s::Schedule)
-    
+    #to be updated
     prof_availabilities!(s)
     for c1 in s.courses
         if c1.date==nothing
-            c1_copy=deepcopy(c1)
+            s_copy=deepcopy(s)
             for c2 in s.courses
-                c1.available=filter(date -> verify_date(c1_copy,c2,date),c1.available)
+                filter!(date -> verify_date(c1,c2,date,s_copy),c1.available)
             end
         end
     end
 
+end
+
+function testDate(s,cindex,d)
+    s_copy=deepcopy(s)
+    setDate!(s_copy,cindex,d)
+    return scheduleConstraints(s_copy)
+end
+
+function lazy_full_filtering!(s::Schedule)
+    
+end
+
+function full_filtering!(s::Schedule)
+    
+    for i in 1:length(s.courses)
+        c=s.courses[i]
+        if c.date ==nothing
+            filter!(date -> testDate(s,i,date),c.available)
+        end
+    end
 end
 
 function check_Ndays!(c::Course)
@@ -196,7 +239,7 @@ function apply_arc_consistency!(s::Schedule)
             for (date_index,date) in enumerate(course.available)
                 
                 s_test=deepcopy(s)
-                s_test.courses[i].date=date
+                setDate!(s,i,date)
                 apply_prep!(s_test)
                 if any(n_available.(values(s_test.courses)).==0)
                     deleteat!(s.courses[i].available,date_index)
@@ -299,7 +342,7 @@ function import_prof(filename::String)
         end
 
 
-        prof = Professor(name,available,parallel_exams)
+        prof = Professor(name,available,parallel_exams,s=(lastdate-firstdate).value+1)
     	push!(professors,prof)
     end
     professors
@@ -424,7 +467,7 @@ function MCV(s::Schedule)
     end
     (value, course_index) = findmin(available_days)
     course_name = s.courses[course_index].name
-    return course_index, course_name
+    return course_index
 end
 
 
@@ -448,7 +491,11 @@ function scheduleConstraints(s::Schedule)
     Uses checkconstraintcouple for constraints relative to two courses (e.g. not on the same day if they are neighbours ...)
     Uses checkconstraintgroups for constraints relative to a groups of courses (e.g. SE422_written and SE422_oral that must be together ...)
     """
+    if !check_prof_constraints(s)
+        return false
+    end
     for c1 in s.courses
+        
         if !checkconstraintsingle(c1)
             return false
         end
@@ -458,6 +505,7 @@ function scheduleConstraints(s::Schedule)
             end
         end
     end
+    
     return checkcontraintgroups(s)
 end
 
@@ -573,23 +621,26 @@ function backtrack(s::Schedule;
                     select_unassigned_variable::Function=select_var_in_order,
                     order_domain_values::Function=select_val_in_order,
                     inference::Function=no_inference)
+    #println(s)
     if goal_test(s)
         return s
     end
     
-    course_index=select_unassigned_variable(s)[1]
+    course_index = select_unassigned_variable(s)[1]
     for course_date in order_domain_values(s,course_index)
         s_copy=deepcopy(s)
-        prof_availabilities!(s_copy)
-        s_copy.courses[course_index].date=course_date
+
+        setDate!(s_copy,course_index,course_date)
         if scheduleConstraints(s_copy)
             inference(s_copy)
-            result=backtrack(s_copy,select_unassigned_variable=select_unassigned_variable,order_domain_values=order_domain_values,inference=inference)
+            result=backtrack(s_copy,
+                            select_unassigned_variable=select_unassigned_variable,
+                            order_domain_values=order_domain_values,
+                            inference=inference)
             if result ≠ nothing
                 return result
             end
         end
-        
     end
     return nothing
 end
