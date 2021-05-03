@@ -203,7 +203,7 @@ function apply_arc_consistency!(s::Schedule)
                 
                 s_test=deepcopy(s)
                 setDate!(s,i,date)
-                apply_prep!(s_test)
+                full_filtering!(s_test)
                 if any(n_available.(values(s_test.courses)).==0)
                     deleteat!(s.courses[i].potential,date_index)
                     removed=true
