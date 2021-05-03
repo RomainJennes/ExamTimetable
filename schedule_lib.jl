@@ -71,8 +71,8 @@ function setDate!(s::Schedule,cindex::Int,date::Date)
     c.date=date
     prof_index=findfirst([p.name==c.prof.name for p in s.professors])
     date_index=(date-s.firstdate).value+1
-    date_index=date_index:date_index+c.Ndays.value-1
-    
+    date_index=date_index:min(date_index+c.Ndays.value-1,length(s.professors[1].exams))
+
     prof=s.professors[prof_index]
     if c.oral
         prof.exams[date_index].+=prof.parallel_exams
