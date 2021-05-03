@@ -198,24 +198,20 @@ function apply_arc_consistency!(s::Schedule)
     for (i,course) in enumerate(s.courses)
         
         if course.date === nothing
-            removed = false
             for (date_index,date) in enumerate(course.potential)
-                
                 s_test=deepcopy(s)
-                setDate!(s,i,date)
+                setDate!(s_test,i,date)
                 full_filtering!(s_test)
-                if any(n_available.(values(s_test.courses)).==0)
+                if any(n_available.(s_test.courses).==0)
                     deleteat!(s.courses[i].potential,date_index)
-                    removed=true
+                    apply_arc_consistency!(s)
+                    return
                 end
             end
-            if removed
-                apply_arc_consistency!(s)
-            end
+
         end
     end
 end
-
 
 function get_available(unavailable::String,firstdate::Date,lastdate::Date)
     dates = collect(firstdate:Day(1):lastdate)
@@ -596,7 +592,6 @@ function backtrack(s::Schedule;
         setDate!(s_copy,course_index,course_date)
         if scheduleConstraints(s_copy)
             inference(s_copy)
-            #println(s_copy)
             result=backtrack(s_copy,
                             select_unassigned_variable=select_unassigned_variable,
                             order_domain_values=order_domain_values,
