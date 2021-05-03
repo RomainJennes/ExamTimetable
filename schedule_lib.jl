@@ -21,6 +21,7 @@ mutable struct Course
     name::String
     prep_days::Day
     available::Array{Date,1}
+    potential::Array{Date,1}
     date::Union{Date,Nothing}
     Ndays::Day
     promotion::String
@@ -40,7 +41,7 @@ mutable struct Course
             coursegroup::Union{Nothing,AbstractString}=nothing,
             prof::Union{Nothing,Professor}=nothing)
         
-        new(name,Day(prep_days),available,date,Day(Ndays),promotion,groups,coursegroup,oral,prof)
+        new(name,Day(prep_days),available,copy(available),date,Day(Ndays),promotion,groups,coursegroup,oral,prof)
     end
 end
 
@@ -102,14 +103,14 @@ function prof_availabilities!(s::Schedule)
 			if counter >= 1
 				for c in courses
 					if c.date==nothing && c.oral
-						filter!(x->x≠date,c.available)
+						filter!(x->x≠date,c.potential)
 					end
 				end
 			end
 		end
 		for course in courses
 			if course.date == nothing
-				filter!(x->x ∈ prof.available,course.available)
+				filter!(x->x ∈ prof.available,course.potential)
 			end
 		end
 	end
@@ -129,28 +130,15 @@ function verify_date(c1,c2,date,s_copy)
     checkconstraintcouple(c1,c2) && checkconstraintcouple(c2,c1)
 end
 
-function apply_prep!(s::Schedule)
-    #to be updated
-    prof_availabilities!(s)
-    for c1 in s.courses
-        if c1.date==nothing
-            s_copy=deepcopy(s)
-            for c2 in s.courses
-                filter!(date -> verify_date(c1,c2,date,s_copy),c1.available)
-            end
-        end
-    end
-
-end
-
-function testDate(s,cindex,d)
+function testfull(s,cindex,d)
     s_copy=deepcopy(s)
     setDate!(s_copy,cindex,d)
     return scheduleConstraints(s_copy)
 end
 
-function lazy_full_filtering!(s::Schedule)
-    
+
+function fast_filtering!(s::Schedule)
+    ##TODO
 end
 
 function full_filtering!(s::Schedule)
@@ -158,34 +146,8 @@ function full_filtering!(s::Schedule)
     for i in 1:length(s.courses)
         c=s.courses[i]
         if c.date ==nothing
-            filter!(date -> testDate(s,i,date),c.available)
+            filter!(date -> testfull(s,i,date),c.potential)
         end
-    end
-end
-
-function check_Ndays!(c::Course)
-    if isempty(c.available)
-        return
-    end
-    count = 1
-    prev_day = c.available[1]
-    for (i,day) in enumerate(c.available[2:end])
-
-        if day == prev_day+Day(1)
-            count = count+1
-        elseif Day(count) < c.Ndays
-            interval = (prev_day-Day(count+1)):Day(1):prev_day
-            c.available = filter(x -> x ∉ interval,c.available)
-            count = 1
-        else
-            count = 1
-        end
-
-        prev_day = day
-    end
-    if Day(count) < c.Ndays
-        interval = prev_day-Day(count+1):Day(1):prev_day
-        c.available = filter(x -> x ∉ interval,c.available)
     end
 end
 
@@ -204,7 +166,7 @@ function Base.show(io::IO,s::Schedule)
     	array = zeros(length(courses),length(dates))
 	    for (i,course) in enumerate(courses)
 	        if course.date === nothing
-	            array[i,date2ind.(course.available)] .= 1
+	            array[i,date2ind.(course.potential)] .= 1
 	        else
 	            array[i,:] .= -1
 	            array[i,date2ind(course.date):(date2ind(course.date+course.Ndays-Day(1)))] .= 2
@@ -225,7 +187,7 @@ end
 
 
 function n_available(c::Course)
-    return length(c.available)
+    return length(c.potential)
 end
 
 function apply_arc_consistency!(s::Schedule)
@@ -236,13 +198,13 @@ function apply_arc_consistency!(s::Schedule)
         
         if course.date === nothing
             removed = false
-            for (date_index,date) in enumerate(course.available)
+            for (date_index,date) in enumerate(course.potential)
                 
                 s_test=deepcopy(s)
                 setDate!(s,i,date)
                 apply_prep!(s_test)
                 if any(n_available.(values(s_test.courses)).==0)
-                    deleteat!(s.courses[i].available,date_index)
+                    deleteat!(s.courses[i].potential,date_index)
                     removed=true
                 end
             end
@@ -460,7 +422,7 @@ function MCV(s::Schedule)
     available_days = Vector{}()
     for i = 1:length(courses)
         if courses[i].date === nothing
-            push!(available_days,length(courses[i].available))
+            push!(available_days,length(courses[i].potential))
         else
             push!(available_days,Inf)
         end
@@ -567,7 +529,7 @@ function checkcontraintgroups(s::Schedule)
             end
         end
         if length(dates)>1
-            j=findfirst([x.date==max(dates...) for x in s.courses])
+            j=findfirst([x.date==max(dates...)&&x.coursegroup==g for x in s.courses])
             if max(dates...)-min(dates...)+s.courses[j].Ndays > Ndays
                 return false
             end
@@ -587,7 +549,7 @@ function select_var_in_order(s::Schedule)
 end
 
 function select_val_in_order(s::Schedule,course_index::Int)
-    s.courses[course_index].available
+    s.courses[course_index].potential
 end
 
 function no_inference(s::Schedule)
@@ -621,7 +583,7 @@ function backtrack(s::Schedule;
                     select_unassigned_variable::Function=select_var_in_order,
                     order_domain_values::Function=select_val_in_order,
                     inference::Function=no_inference)
-    #println(s)
+    
     if goal_test(s)
         return s
     end
@@ -633,6 +595,7 @@ function backtrack(s::Schedule;
         setDate!(s_copy,course_index,course_date)
         if scheduleConstraints(s_copy)
             inference(s_copy)
+            #println(s_copy)
             result=backtrack(s_copy,
                             select_unassigned_variable=select_unassigned_variable,
                             order_domain_values=order_domain_values,
@@ -648,7 +611,7 @@ end
 function greendays(s::Schedule)
     res = 0
     for course in s.courses
-        res = res + length(course.available)
+        res = res + length(course.potential)
     end
     res
 end
@@ -656,10 +619,10 @@ end
 function LCV(s::Schedule,courseIndex::Int64)
     
     d = Vector{Tuple{Int64,Date}}()
-    for date in s.courses[courseIndex].available
+    for date in s.courses[courseIndex].potential
         s_copy = deepcopy(s)
         s_copy.courses[courseIndex].date = date
-        apply_prep!(s_copy)
+        full_filtering!(s_copy)
         val = greendays(s_copy)
         push!(d,(val,date))
     end
