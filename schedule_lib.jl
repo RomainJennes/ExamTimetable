@@ -321,7 +321,7 @@ function import_excel(filename::String,professors::Vector{Professor})
     coursegroups=Dict{String,Array{String,1}}()
 
 	@assert occursin("xlsx",filename) "Please provide an excel file"
-	names = XLSX.sheetnames(XLSX.readxlsx(filename))
+	names = XLSX.sheetnames(XLSX.readxlsx(filename))[2:end]
 	for name in names
 		(some_courses,some_coursegroups) = import_excel_sheet(filename,professors,name)
 		push!(courses,some_courses...)
