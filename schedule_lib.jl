@@ -71,7 +71,7 @@ function setDate!(s::Schedule,cindex::Int,date::Date)
     c.date=date
     prof_index=findfirst([p.name==c.prof.name for p in s.professors])
     date_index=(date-s.firstdate).value+1
-    date_index=date_index:date_index+c.Ndays.value-1
+    date_index=date_index:min(date_index+c.Ndays.value-1,length(s.professors[1].exams))
     
     prof=s.professors[prof_index]
     if c.oral
@@ -135,11 +135,6 @@ function testfull(s,cindex,d)
     s_copy=deepcopy(s)
     setDate!(s_copy,cindex,d)
     return scheduleConstraints(s_copy)
-end
-
-
-function fast_filtering!(s::Schedule)
-    ##
 end
 
 function full_filtering!(s::Schedule)
@@ -321,7 +316,7 @@ function import_excel(filename::String,professors::Vector{Professor})
     coursegroups=Dict{String,Array{String,1}}()
 
 	@assert occursin("xlsx",filename) "Please provide an excel file"
-	names = XLSX.sheetnames(XLSX.readxlsx(filename))[2:end]
+	names = XLSX.sheetnames(XLSX.readxlsx(filename))
 	for name in names
 		(some_courses,some_coursegroups) = import_excel_sheet(filename,professors,name)
 		push!(courses,some_courses...)
