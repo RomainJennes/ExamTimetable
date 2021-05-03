@@ -92,10 +92,10 @@ function prof_availabilities!(s::Schedule)
 					else
 						counter = counter + 1
 						@assert counter <= prof.parallel_exams "To much exams for this professor"
-						# if counter == prof.parallel_exams
-						# 	filter!(x->x≠date,prof.available)
-						# 	break
-						# end
+						if counter == prof.parallel_exams
+							filter!(x->x≠date,prof.available)
+							break
+						end
 					end
 				end
 			end
