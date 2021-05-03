@@ -71,12 +71,13 @@ function setDate!(s::Schedule,cindex::Int,date::Date)
     c.date=date
     prof_index=findfirst([p.name==c.prof.name for p in s.professors])
     date_index=(date-s.firstdate).value+1
+    date_index=date_index:date_index+c.Ndays.value-1
     
     prof=s.professors[prof_index]
     if c.oral
-        prof.exams[date_index]+=prof.parallel_exams
+        prof.exams[date_index].+=prof.parallel_exams
     else
-        prof.exams[date_index]+=1
+        prof.exams[date_index].+=1
     end
 end
 
@@ -138,7 +139,7 @@ end
 
 
 function fast_filtering!(s::Schedule)
-    ##TODO
+    ##
 end
 
 function full_filtering!(s::Schedule)
